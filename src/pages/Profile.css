@@ -1,0 +1,199 @@
+.profile-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.profile-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.profile-header h1 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.wallet-info {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.wallet-info .label {
+  color: #666;
+  font-weight: 500;
+}
+
+.wallet-info .address {
+  font-family: monospace;
+  background: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+
+.tokens-section {
+  margin-top: 2rem;
+}
+
+.tokens-section h2 {
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+}
+
+.no-tokens {
+  text-align: center;
+  padding: 3rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  color: #666;
+}
+
+.tokens-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.token-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.token-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.token-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.token-title h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.token-symbol {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.token-description {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.token-links {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.website-link,
+.bexie-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.website-link {
+  background: #3498db;
+  color: white;
+}
+
+.bexie-badge {
+  background: #9b59b6;
+  color: white;
+}
+
+.social-links {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.social-link {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: white;
+  text-decoration: none;
+}
+
+.social-link.telegram {
+  background: #0088cc;
+}
+
+.social-link.twitter {
+  background: #000000;
+}
+
+.contract-info {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.contract-info .label {
+  color: #666;
+  margin-right: 0.5rem;
+}
+
+.contract-info .address {
+  font-family: monospace;
+}
+
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.error-message {
+  background-color: #fee2e2;
+  border: 1px solid #ef4444;
+  color: #b91c1c;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .profile-container {
+    padding: 1rem;
+  }
+
+  .tokens-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+} 

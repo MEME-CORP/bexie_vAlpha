@@ -4,8 +4,16 @@ import './Navbar.css';
 function Navbar({ account, onDisconnect }) {
   return (
     <nav className="navbar">
-      <div className="nav-brand">
-        <Link to="/">DApp</Link>
+      <div className="navbar-brand">
+        <Link to="/">
+          <img 
+            src="/bexie-logo.png"
+            alt="Bexie Logo"
+            className="navbar-logo"
+            width="40"
+            height="40"
+          />
+        </Link>
       </div>
       <div className="nav-links">
         <Link to="/">Dashboard</Link>

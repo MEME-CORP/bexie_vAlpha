@@ -49,4 +49,16 @@
 
 .disconnect-button:hover {
   background-color: #c0392b;
+}
+
+.navbar-logo {
+  padding: 8px;
+  object-fit: contain;
+  margin-right: 16px;
+  vertical-align: middle;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
 } 

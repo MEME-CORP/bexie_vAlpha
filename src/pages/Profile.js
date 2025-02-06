@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabaseClient';
 import './Profile.css';
+import AgentActivationForm from '../components/AgentActivationForm';
 
 function Profile({ account }) {
   const [tokens, setTokens] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showActivationForm, setShowActivationForm] = useState(false);
+  const [selectedToken, setSelectedToken] = useState(null);
 
   useEffect(() => {
     const fetchUserTokens = async () => {
@@ -151,11 +154,31 @@ function Profile({ account }) {
                     </span>
                   </div>
                 )}
+
+                <button 
+                  className="activate-agent-button"
+                  onClick={() => {
+                    setSelectedToken(token);
+                    setShowActivationForm(true);
+                  }}
+                >
+                  Activate Agent
+                </button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {showActivationForm && selectedToken && (
+        <AgentActivationForm
+          onClose={() => {
+            setShowActivationForm(false);
+            setSelectedToken(null);
+          }}
+          tokenName={selectedToken.token_name}
+        />
+      )}
     </div>
   );
 }

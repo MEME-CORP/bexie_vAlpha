@@ -20,6 +20,7 @@
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
+  z-index: 100;
 }
 
 .close-button {
@@ -796,4 +797,72 @@ button:disabled {
     font-size: 0.8125rem;
     padding: 0.25rem 0.625rem;
   }
+}
+
+.exit-button {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.exit-button:hover {
+  background-color: #f1f5f9;
+  color: #ef4444;
+}
+
+.exit-confirmation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.exit-confirmation-dialog {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  max-width: 400px;
+  width: 90%;
+}
+
+.exit-confirmation-dialog h3 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+}
+
+.exit-confirmation-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: #64748b;
+}
+
+.exit-confirmation-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.danger {
+  background-color: #ef4444 !important;
+}
+
+.danger:hover {
+  background-color: #dc2626 !important;
 } 

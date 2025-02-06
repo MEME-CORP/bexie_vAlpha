@@ -9,6 +9,7 @@ const personalTraits = [
 ];
 
 function AgentActivationForm({ onClose, tokenName }) {
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     description: '',
@@ -45,10 +46,56 @@ function AgentActivationForm({ onClose, tokenName }) {
     onClose();
   };
 
+  const handleExitClick = () => {
+    // Check if form has any data filled
+    const hasChanges = formData.description || 
+                      formData.selectedTraits.length > 0 || 
+                      formData.telegramUsername || 
+                      (formData.botChoice === 'custom' && formData.botToken);
+
+    if (hasChanges) {
+      setShowExitConfirmation(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleConfirmExit = (confirmed) => {
+    if (confirmed) {
+      onClose();
+    }
+    setShowExitConfirmation(false);
+  };
+
   return (
     <div className="agent-activation-overlay">
       <div className="agent-activation-modal">
-        <button className="close-button" onClick={onClose}>&times;</button>
+        <button className="exit-button" onClick={handleExitClick}>
+          <i className="fas fa-times"></i>
+        </button>
+
+        {showExitConfirmation && (
+          <div className="exit-confirmation-overlay">
+            <div className="exit-confirmation-dialog">
+              <h3>Exit Configuration?</h3>
+              <p>Your changes will be lost. Are you sure you want to exit?</p>
+              <div className="exit-confirmation-actions">
+                <button 
+                  className="secondary-button"
+                  onClick={() => handleConfirmExit(false)}
+                >
+                  Continue Editing
+                </button>
+                <button 
+                  className="primary-button danger"
+                  onClick={() => handleConfirmExit(true)}
+                >
+                  Exit Without Saving
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Main Title with Token Name */}
         <div className="form-header">

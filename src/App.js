@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import TokenDeployer from './pages/TokenDeployer';
 import Profile from './pages/Profile';
 import ConnectWallet from './components/ConnectWallet';
+import TokenDetail from './pages/TokenDetail';
 
 function App() {
   const [account, setAccount] = useState('');
@@ -93,6 +94,7 @@ function App() {
           />
           <Routes>
             <Route path="/" element={<Dashboard account={account} />} />
+            <Route path="/token/:id" element={<TokenDetail />} />
             <Route path="/deploy" element={<TokenDeployer account={account} />} />
             <Route path="/profile" element={<Profile account={account} />} />
             <Route path="*" element={<Navigate to="/" />} />

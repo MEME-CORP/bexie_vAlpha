@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabaseClient';
 import './Dashboard.css';
+import { Link } from 'react-router-dom';
 
 function Dashboard() {
   const [tokens, setTokens] = useState([]);
@@ -64,7 +65,12 @@ function Dashboard() {
         ) : (
           <div className="tokens-grid">
             {tokens.map((token) => (
-              <div key={token.id} className="token-card">
+              <Link 
+                to={`/token/${token.id}`} 
+                key={token.id} 
+                className="token-card"
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
                 <div className="token-header">
                   <img 
                     src={token.logo_url} 
@@ -139,7 +145,7 @@ function Dashboard() {
                     {token.users?.wallet_address.slice(-4)}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

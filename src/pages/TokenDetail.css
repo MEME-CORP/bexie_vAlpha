@@ -1,0 +1,78 @@
+.token-detail-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.token-detail-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.token-detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.token-detail-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin-right: 1.5rem;
+}
+
+.token-detail-title h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.token-detail-symbol {
+  color: #666;
+  font-size: 1.2rem;
+}
+
+.token-detail-section {
+  margin: 2rem 0;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.token-detail-section h2 {
+  margin-bottom: 1rem;
+}
+
+.token-detail-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.detail-website-link,
+.detail-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: #333;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.detail-website-link:hover,
+.detail-social-link:hover {
+  background: #e5e5e5;
+}
+
+.contract-detail-info .label {
+  font-weight: bold;
+  margin-right: 0.5rem;
+}
+
+.contract-detail-info p {
+  margin: 0.5rem 0;
+} 

@@ -2,13 +2,73 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import './TokenDetail.css';
+import { ethers } from 'ethers';
+
+// Update the Bonding Curve ABI to include all necessary functions
+const BONDING_CURVE_ABI = [
+  "function buyTokens(uint256 minTokens) payable",
+  "function buyTokensFor(address beneficiary) payable",
+  "function getCurrentPrice() view returns (uint256)",
+  "function getBeraPrice() view returns (uint256)",
+  "function totalSupplyTokens() view returns (uint256)",
+  "function getSellPrice(uint256 tokenAmount) view returns (uint256)",
+  "function sellTokens(uint256 tokenAmount) returns (uint256)",
+  "function liquidityDeployed() view returns (bool)",
+  "function collectedBeraUSD() view returns (uint256)",
+  "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)",
+  "event TokensSold(address indexed seller, uint256 tokens, uint256 beraAmount)"
+];
 
 function TokenDetail() {
   const { id } = useParams();
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [purchaseAmount, setPurchaseAmount] = useState('');
+  const [purchaseStatus, setPurchaseStatus] = useState('');
+  const [marketInfo, setMarketInfo] = useState(null);
+  const [isLoadingMarket, setIsLoadingMarket] = useState(true);
 
+  // Add function to fetch market info
+  const fetchMarketInfo = async (bondingCurveAddress) => {
+    if (!bondingCurveAddress) {
+      console.error('No bonding curve address provided');
+      setError('Token contract information is incomplete');
+      setIsLoadingMarket(false);
+      return;
+    }
+
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const bondingCurve = new ethers.Contract(
+        bondingCurveAddress,
+        BONDING_CURVE_ABI,
+        provider
+      );
+
+      const [beraPrice, tokenPrice, remainingSupply] = await Promise.all([
+        bondingCurve.getBeraPrice(),
+        bondingCurve.getCurrentPrice(),
+        bondingCurve.totalSupplyTokens()
+      ]);
+
+      const totalSupply = ethers.utils.parseEther("1000000000"); // 1B tokens
+      const soldTokens = totalSupply.sub(remainingSupply);
+
+      setMarketInfo({
+        beraPriceUSD: ethers.utils.formatEther(beraPrice),
+        tokenPriceUSD: ethers.utils.formatUnits(tokenPrice, 6),
+        remainingSupply: ethers.utils.formatEther(remainingSupply),
+        soldTokens: ethers.utils.formatEther(soldTokens)
+      });
+    } catch (error) {
+      console.error('Error fetching market info:', error);
+      setError('Failed to load market information');
+      setIsLoadingMarket(false);
+    }
+  };
+
+  // Update useEffect to fetch market info after token data
   useEffect(() => {
     const fetchToken = async () => {
       try {
@@ -25,6 +85,11 @@ function TokenDetail() {
 
         if (tokenError) throw tokenError;
         setToken(tokenData);
+        
+        // Fetch market info if bonding curve address exists
+        if (tokenData.bonding_curve_contract_address) {
+          fetchMarketInfo(tokenData.bonding_curve_contract_address);
+        }
       } catch (error) {
         console.error('Error fetching token:', error);
         setError('Failed to load token details');
@@ -60,6 +125,92 @@ function TokenDetail() {
       };
     }
   }, [token]);
+
+  // Update the purchase function to handle status better
+  const handlePurchase = async (e) => {
+    e.preventDefault();
+    if (!window.ethereum) {
+      setError('Please install MetaMask to purchase tokens');
+      return;
+    }
+
+    if (!token?.bonding_curve_contract_address) {
+      setError('Token contract information is not available');
+      return;
+    }
+
+    if (!purchaseAmount || parseFloat(purchaseAmount) <= 0) {
+      setError('Please enter a valid amount');
+      return;
+    }
+
+    try {
+      setPurchaseStatus('Initiating purchase...');
+      setError(null);
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      // Request account access
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+      // Initialize bonding curve contract
+      const bondingCurve = new ethers.Contract(
+        token.bonding_curve_contract_address,
+        BONDING_CURVE_ABI,
+        signer
+      );
+
+      // Convert purchase amount to wei
+      const beraAmount = ethers.utils.parseEther(purchaseAmount);
+      
+      // Get current price for user feedback
+      const currentPrice = await bondingCurve.getCurrentPrice();
+      const priceInUSD = ethers.utils.formatUnits(currentPrice, 6);
+      setPurchaseStatus(`Confirming transaction at $${priceInUSD} per token...`);
+
+      // Execute purchase
+      const tx = await bondingCurve.buyTokens(1, { 
+        value: beraAmount,
+        gasLimit: 300000
+      });
+      
+      setPurchaseStatus('Processing purchase...');
+      const receipt = await tx.wait();
+
+      // Find and parse purchase event
+      const event = receipt.logs.find(log => {
+        try {
+          return bondingCurve.interface.parseLog(log)?.name === 'TokensPurchased';
+        } catch {
+          return false;
+        }
+      });
+
+      if (event) {
+        const [buyer, tokensReceived, beraSpent] = bondingCurve.interface.parseLog(event).args;
+        const formattedTokens = parseFloat(ethers.utils.formatEther(tokensReceived)).toLocaleString();
+        setPurchaseStatus(`Successfully purchased ${formattedTokens} tokens!`);
+        setPurchaseAmount('');
+        
+        // Refresh market info
+        await fetchMarketInfo(token.bonding_curve_contract_address);
+      } else {
+        throw new Error('Purchase event not found in transaction');
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      if (error.code === 'ACTION_REJECTED') {
+        setError('Transaction was rejected by user');
+      } else if (error.code === 'INSUFFICIENT_FUNDS') {
+        setError('Insufficient funds to complete the purchase');
+      } else {
+        setError(error.message || 'Failed to purchase tokens');
+      }
+      // Clear purchase status on error
+      setPurchaseStatus('');
+    }
+  };
 
   if (isLoading) {
     return <div className="token-detail-container">Loading...</div>;
@@ -148,6 +299,47 @@ function TokenDetail() {
               <span className="value">{token.users?.wallet_address}</span>
             </p>
           </div>
+        </div>
+
+        {/* Add market info section */}
+        {marketInfo && (
+          <div className="token-detail-section">
+            <h2>Market Information</h2>
+            <div className="market-info">
+              <p>Current Price: ${parseFloat(marketInfo.tokenPriceUSD).toFixed(8)} USD</p>
+              <p>Tokens Sold: {parseInt(marketInfo.soldTokens).toLocaleString()}</p>
+              <p>Remaining Supply: {parseInt(marketInfo.remainingSupply).toLocaleString()}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Add purchase form */}
+        <div className="token-detail-section">
+          <h2>Purchase Tokens</h2>
+          <form onSubmit={handlePurchase} className="purchase-form">
+            <div className="form-group">
+              <label htmlFor="beraAmount">BERA Amount:</label>
+              <input
+                type="number"
+                id="beraAmount"
+                value={purchaseAmount}
+                onChange={(e) => setPurchaseAmount(e.target.value)}
+                min="0"
+                step="0.01"
+                required
+                placeholder="Enter BERA amount"
+                className="purchase-input"
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={!purchaseAmount || !token?.bonding_curve_contract_address}
+            >
+              {purchaseStatus || 'Buy Tokens'}
+            </button>
+          </form>
+          {purchaseStatus && <div className="status-message">{purchaseStatus}</div>}
+          {error && <div className="error-message">{error}</div>}
         </div>
       </div>
     </div>

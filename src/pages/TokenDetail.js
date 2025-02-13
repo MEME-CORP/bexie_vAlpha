@@ -36,6 +36,31 @@ function TokenDetail() {
     fetchToken();
   }, [id]);
 
+  useEffect(() => {
+    if (token && token.token_symbol) {
+      const widget = new window.TradingView.widget({
+        width: '100%',
+        height: 500,
+        symbol: `BINANCE:${token.token_symbol}USDT`,
+        interval: 'D',
+        timezone: 'Etc/UTC',
+        theme: 'dark',
+        style: '1',
+        locale: 'en',
+        toolbar_bg: '#f1f3f6',
+        enable_publishing: false,
+        allow_symbol_change: true,
+        container_id: 'tradingview_chart'
+      });
+
+      return () => {
+        if (widget && widget.remove) {
+          widget.remove();
+        }
+      };
+    }
+  }, [token]);
+
   if (isLoading) {
     return <div className="token-detail-container">Loading...</div>;
   }
@@ -57,6 +82,14 @@ function TokenDetail() {
             <h1>{token.token_name}</h1>
             <span className="token-detail-symbol">{token.token_symbol}</span>
           </div>
+        </div>
+
+        <div className="token-detail-section">
+          <h2>Price Chart</h2>
+          <div 
+            id="tradingview_chart" 
+            className="tradingview-chart-container"
+          />
         </div>
 
         <div className="token-detail-section">

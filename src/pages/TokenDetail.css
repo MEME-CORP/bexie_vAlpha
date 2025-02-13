@@ -75,4 +75,12 @@
 
 .contract-detail-info p {
   margin: 0.5rem 0;
+}
+
+.tradingview-chart-container {
+  width: 100%;
+  height: 500px;
+  margin: 20px 0;
+  border-radius: 8px;
+  overflow: hidden;
 } 

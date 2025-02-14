@@ -248,13 +248,11 @@ function TokenDeployer({ account }) {
       setDeploymentStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      console.log('Transaction receipt:', receipt);
-      console.log('Transaction logs:', receipt.logs);
-
-      // Replace the existing address extraction logic with event parsing
+      // Find and parse the TokenCreated event
       const event = receipt.logs.find(log => {
         try {
-          return tokenFactory.interface.parseLog(log)?.name === 'TokenCreated';
+          const parsedLog = tokenFactory.interface.parseLog(log);
+          return parsedLog.name === "TokenCreated";
         } catch {
           return false;
         }
@@ -264,15 +262,47 @@ function TokenDeployer({ account }) {
         throw new Error("Token creation event not found");
       }
 
+      // Parse the event data
       const parsedEvent = tokenFactory.interface.parseLog(event);
-      const createdContractAddress = parsedEvent.args.token;
-      const bondingCurveAddress = parsedEvent.args.bondingCurve;
+      const [creator, tokenAddress, bondingCurveAddress] = parsedEvent.args;
 
-      // Remove the retry verification loop and directly return the addresses
-      setDeploymentStatus('Token deployed successfully!');
+      // Increase the wait time before verification
+      setDeploymentStatus('Waiting for blockchain confirmation...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Try verification multiple times
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          const [verifiedBondingCurve, isActive] = await tokenFactory.getTokenInfo(tokenAddress);
+          
+          if (!isActive || verifiedBondingCurve !== bondingCurveAddress) {
+            throw new Error("Token verification failed");
+          }
+          
+          setDeploymentStatus('Token deployed and verified successfully!');
+          
+          return {
+            tokenAddress,
+            bondingCurveAddress,
+            txHash: tx.hash
+          };
+        } catch (verifyError) {
+          console.error(`Verification attempt ${4 - retries} failed:`, verifyError);
+          retries--;
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
+
+      // If verification fails but we have the addresses, return them anyway
+      console.warn('Token deployed but verification failed after multiple attempts');
+      setDeploymentStatus('Token deployed successfully! (Verification pending)');
+      
       return {
-        tokenAddress: createdContractAddress,
-        bondingCurveAddress: bondingCurveAddress,
+        tokenAddress,
+        bondingCurveAddress,
         txHash: tx.hash
       };
 
@@ -281,11 +311,7 @@ function TokenDeployer({ account }) {
       if (error.message.includes('user rejected transaction')) {
         throw new Error('Transaction was rejected by user');
       }
-      // Add more descriptive error message
-      const errorMessage = error.message.includes('execution reverted') 
-        ? 'Transaction failed: Please check your token parameters and try again'
-        : `Deployment failed: ${error.message}`;
-      throw new Error(errorMessage);
+      throw new Error(`Deployment failed: ${error.message}`);
     }
   };
 

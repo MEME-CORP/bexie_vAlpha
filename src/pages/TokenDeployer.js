@@ -249,37 +249,44 @@ function TokenDeployer({ account }) {
       const receipt = await tx.wait();
 
       console.log('Transaction receipt:', receipt);
+      console.log('Transaction logs:', receipt.logs);
 
-      // Find the TokenCreated event
-      const event = receipt.logs.find(log => {
-        try {
-          return tokenFactory.interface.parseLog(log)?.name === 'TokenCreated';
-        } catch {
-          return false;
-        }
-      });
-
-      if (!event) {
-        throw new Error("Token creation event not found in transaction receipt");
-      }
-
-      // Parse the event data according to the DOC
-      const [creator, tokenAddress, bondingCurveAddress] = tokenFactory.interface.parseLog(event).args;
-
-      if (!tokenAddress || !bondingCurveAddress) {
-        throw new Error("Failed to get token or bonding curve address from event");
-      }
-
-      console.log('Deployment successful:', {
-        creator,
-        tokenAddress,
-        bondingCurveAddress
-      });
-
-      setDeploymentStatus('Token deployed successfully!');
+      // In deployTokenToBlockchain function, after receipt.wait()
+      let createdContractAddress = receipt.creates;
+      let bondingCurveAddress = null;
       
+      if (!createdContractAddress) {
+        // If creates is not available, try to get it from the logs
+        const nonFactoryAddresses = receipt.logs
+          .filter(log => log.address !== TOKEN_FACTORY_ADDRESS)
+          .map(log => log.address);
+
+        // First non-factory address is the token
+        createdContractAddress = nonFactoryAddresses[0];
+        // Second non-factory address is the bonding curve
+        bondingCurveAddress = nonFactoryAddresses[1];
+      }
+
+      if (!createdContractAddress) {
+        throw new Error("Could not determine created contract address");
+      }
+
+      if (!bondingCurveAddress) {
+        // Try to get bonding curve from token info
+        try {
+          [bondingCurveAddress] = await tokenFactory.getTokenInfo(createdContractAddress);
+        } catch (error) {
+          console.warn("Could not get bonding curve address from token info:", error);
+        }
+      }
+
+      // Increase the wait time before verification
+      setDeploymentStatus('Waiting for blockchain confirmation...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Return both addresses
       return {
-        tokenAddress,
+        tokenAddress: createdContractAddress,
         bondingCurveAddress,
         txHash: tx.hash
       };
@@ -289,7 +296,11 @@ function TokenDeployer({ account }) {
       if (error.message.includes('user rejected transaction')) {
         throw new Error('Transaction was rejected by user');
       }
-      throw new Error(`Deployment failed: ${error.message}`);
+      // Add more descriptive error message
+      const errorMessage = error.message.includes('execution reverted') 
+        ? 'Transaction failed: Please check your token parameters and try again'
+        : `Deployment failed: ${error.message}`;
+      throw new Error(errorMessage);
     }
   };
 

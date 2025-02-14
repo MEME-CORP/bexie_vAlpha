@@ -152,16 +152,6 @@ function TokenDetail() {
       return;
     }
 
-    if (!token?.bonding_curve_contract_address) {
-      setError('Token contract information is not available');
-      return;
-    }
-
-    if (!purchaseAmount || parseFloat(purchaseAmount) <= 0) {
-      setError('Please enter a valid amount');
-      return;
-    }
-
     try {
       setPurchaseStatus('Initiating purchase...');
       setError(null);
@@ -169,37 +159,36 @@ function TokenDetail() {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Request account access
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-
-      // Initialize bonding curve contract
+      // Format BERA amount properly
+      const beraAmount = ethers.utils.parseEther(purchaseAmount);
+      
+      // Initialize contract with correct ABI
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        BONDING_CURVE_ABI,
+        [
+          "function buyTokens(uint256 minTokens) payable",
+          "function buyTokensFor(address beneficiary) payable",
+          "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)"
+        ],
         signer
       );
 
-      // Convert purchase amount to wei
-      const beraAmount = ethers.utils.parseEther(purchaseAmount);
-      
-      // Get current price for user feedback
-      const currentPrice = await bondingCurve.getCurrentPrice();
-      const priceInUSD = ethers.utils.formatUnits(currentPrice, 6);
-      setPurchaseStatus(`Confirming transaction at $${priceInUSD} per token...`);
-
-      // Execute purchase
-      const tx = await bondingCurve.buyTokens(1, { 
-        value: beraAmount,
-        gasLimit: 300000
-      });
+      // Execute purchase with minimum tokens parameter
+      const tx = await bondingCurve.buyTokens(
+        1, // minTokens parameter (unused but required)
+        { 
+          value: beraAmount,
+          gasLimit: 100000
+        }
+      );
       
       setPurchaseStatus('Processing purchase...');
       const receipt = await tx.wait();
 
-      // Find and parse purchase event
+      // Find purchase event using the correct method
       const event = receipt.logs.find(log => {
         try {
-          return bondingCurve.interface.parseLog(log)?.name === 'TokensPurchased';
+          return bondingCurve.interface.parseLog(log)?.name === "TokensPurchased";
         } catch {
           return false;
         }
@@ -207,8 +196,8 @@ function TokenDetail() {
 
       if (event) {
         const [buyer, tokensReceived, beraSpent] = bondingCurve.interface.parseLog(event).args;
-        const formattedTokens = parseFloat(ethers.utils.formatEther(tokensReceived)).toLocaleString();
-        setPurchaseStatus(`Successfully purchased ${formattedTokens} tokens!`);
+        const formattedTokens = ethers.utils.formatEther(tokensReceived);
+        setPurchaseStatus(`Successfully purchased ${parseFloat(formattedTokens).toLocaleString()} tokens!`);
         setPurchaseAmount('');
         
         // Refresh market info
@@ -218,14 +207,7 @@ function TokenDetail() {
       }
     } catch (error) {
       console.error('Purchase error:', error);
-      if (error.code === 'ACTION_REJECTED') {
-        setError('Transaction was rejected by user');
-      } else if (error.code === 'INSUFFICIENT_FUNDS') {
-        setError('Insufficient funds to complete the purchase');
-      } else {
-        setError(error.message || 'Failed to purchase tokens');
-      }
-      // Clear purchase status on error
+      setError(error.message || 'Failed to purchase tokens');
       setPurchaseStatus('');
     }
   };

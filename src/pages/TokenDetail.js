@@ -46,11 +46,20 @@ function TokenDetail() {
         provider
       );
 
+      // Fetch market data
       const [beraPrice, tokenPrice, remainingSupply] = await Promise.all([
-        bondingCurve.getBeraPrice(),
-        bondingCurve.getCurrentPrice(),
-        bondingCurve.totalSupplyTokens()
+        bondingCurve.getBeraPrice().catch(() => ethers.BigNumber.from(0)),
+        bondingCurve.getCurrentPrice().catch(() => ethers.BigNumber.from(0)),
+        bondingCurve.totalSupplyTokens().catch(() => ethers.utils.parseEther("1000000000"))
       ]);
+
+      // Try to get liquidity status but don't block on it
+      let isLiquidityDeployed = false;
+      try {
+        isLiquidityDeployed = await bondingCurve.liquidityDeployed();
+      } catch (e) {
+        console.warn('Could not check liquidity status:', e);
+      }
 
       const totalSupply = ethers.utils.parseEther("1000000000"); // 1B tokens
       const soldTokens = totalSupply.sub(remainingSupply);
@@ -59,11 +68,20 @@ function TokenDetail() {
         beraPriceUSD: ethers.utils.formatEther(beraPrice),
         tokenPriceUSD: ethers.utils.formatUnits(tokenPrice, 6),
         remainingSupply: ethers.utils.formatEther(remainingSupply),
-        soldTokens: ethers.utils.formatEther(soldTokens)
+        soldTokens: ethers.utils.formatEther(soldTokens),
+        isLiquidityDeployed
       });
     } catch (error) {
       console.error('Error fetching market info:', error);
+      setMarketInfo({
+        beraPriceUSD: "0",
+        tokenPriceUSD: "0",
+        remainingSupply: "1000000000",
+        soldTokens: "0",
+        isLiquidityDeployed: false
+      });
       setError('Failed to load market information');
+    } finally {
       setIsLoadingMarket(false);
     }
   };
@@ -309,6 +327,9 @@ function TokenDetail() {
               <p>Current Price: ${parseFloat(marketInfo.tokenPriceUSD).toFixed(8)} USD</p>
               <p>Tokens Sold: {parseInt(marketInfo.soldTokens).toLocaleString()}</p>
               <p>Remaining Supply: {parseInt(marketInfo.remainingSupply).toLocaleString()}</p>
+              {!marketInfo.isLiquidityDeployed && (
+                <p className="warning">Note: Token liquidity not yet deployed</p>
+              )}
             </div>
           </div>
         )}

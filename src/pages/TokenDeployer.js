@@ -251,59 +251,28 @@ function TokenDeployer({ account }) {
       console.log('Transaction receipt:', receipt);
       console.log('Transaction logs:', receipt.logs);
 
-      // Fix the constant variable issue by using let
-      let createdContractAddress = receipt.creates;
-      
-      if (!createdContractAddress) {
-        // If creates is not available, try to get it from the logs
-        for (const log of receipt.logs) {
-          if (log.address !== TOKEN_FACTORY_ADDRESS) {
-            // The first non-factory address in logs is likely our token
-            createdContractAddress = log.address;
-            break;
-          }
-        }
-      }
-
-      if (!createdContractAddress) {
-        throw new Error("Could not determine created contract address");
-      }
-
-      // Increase the wait time before verification
-      setDeploymentStatus('Waiting for blockchain confirmation...');
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Increase to 5 seconds
-
-      // Try verification multiple times
-      let retries = 3;
-      while (retries > 0) {
+      // Replace the existing address extraction logic with event parsing
+      const event = receipt.logs.find(log => {
         try {
-          // Try to get the bonding curve address
-          const [bondingCurveAddress] = await tokenFactory.getTokenInfo(createdContractAddress);
-          
-          setDeploymentStatus('Token deployed and verified successfully!');
-          
-          return {
-            tokenAddress: createdContractAddress,
-            bondingCurveAddress,
-            txHash: tx.hash
-          };
-        } catch (verifyError) {
-          console.error(`Verification attempt ${4 - retries} failed:`, verifyError);
-          retries--;
-          if (retries > 0) {
-            // Wait 2 seconds before trying again
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
+          return tokenFactory.interface.parseLog(log)?.name === 'TokenCreated';
+        } catch {
+          return false;
         }
+      });
+
+      if (!event) {
+        throw new Error("Token creation event not found");
       }
 
-      // If all verification attempts fail
-      console.warn('Token deployed but verification failed after multiple attempts');
-      setDeploymentStatus('Token deployed successfully! (Verification pending)');
-      
+      const parsedEvent = tokenFactory.interface.parseLog(event);
+      const createdContractAddress = parsedEvent.args.token;
+      const bondingCurveAddress = parsedEvent.args.bondingCurve;
+
+      // Remove the retry verification loop and directly return the addresses
+      setDeploymentStatus('Token deployed successfully!');
       return {
         tokenAddress: createdContractAddress,
-        bondingCurveAddress: null,
+        bondingCurveAddress: bondingCurveAddress,
         txHash: tx.hash
       };
 

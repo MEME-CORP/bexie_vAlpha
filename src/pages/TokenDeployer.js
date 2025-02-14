@@ -248,27 +248,36 @@ function TokenDeployer({ account }) {
       setDeploymentStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Find the TokenCreated event by looking for the event signature
-      const tokenCreatedTopic = ethers.utils.id(
-        "TokenCreated(address,address,address)"
-      );
+      console.log('Transaction receipt:', receipt);
 
-      const event = receipt.logs.find(
-        log => log.topics[0] === tokenCreatedTopic
-      );
+      // Find the TokenCreated event
+      const event = receipt.logs.find(log => {
+        try {
+          return tokenFactory.interface.parseLog(log)?.name === 'TokenCreated';
+        } catch {
+          return false;
+        }
+      });
 
       if (!event) {
-        throw new Error("Token creation event not found");
+        throw new Error("Token creation event not found in transaction receipt");
       }
 
-      // Parse the event data - all parameters are indexed so they're in topics
-      const tokenAddress = ethers.utils.getAddress('0x' + event.topics[2].slice(26));
-      const bondingCurveAddress = ethers.utils.getAddress('0x' + event.topics[3].slice(26));
+      // Parse the event data according to the DOC
+      const [creator, tokenAddress, bondingCurveAddress] = tokenFactory.interface.parseLog(event).args;
 
-      // Verify the deployment
-      setDeploymentStatus('Verifying deployment...');
-      await verifyTokenDeployment(provider, tokenAddress, bondingCurveAddress);
+      if (!tokenAddress || !bondingCurveAddress) {
+        throw new Error("Failed to get token or bonding curve address from event");
+      }
 
+      console.log('Deployment successful:', {
+        creator,
+        tokenAddress,
+        bondingCurveAddress
+      });
+
+      setDeploymentStatus('Token deployed successfully!');
+      
       return {
         tokenAddress,
         bondingCurveAddress,

@@ -248,58 +248,27 @@ function TokenDeployer({ account }) {
       setDeploymentStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Find and parse the TokenCreated event
-      const event = receipt.logs.find(log => {
-        try {
-          const parsedLog = tokenFactory.interface.parseLog(log);
-          return parsedLog.name === "TokenCreated";
-        } catch {
-          return false;
-        }
-      });
+      // Find the TokenCreated event by looking for the event signature
+      const tokenCreatedTopic = ethers.utils.id(
+        "TokenCreated(address,address,address)"
+      );
+
+      const event = receipt.logs.find(
+        log => log.topics[0] === tokenCreatedTopic
+      );
 
       if (!event) {
         throw new Error("Token creation event not found");
       }
 
-      // Parse the event data
-      const parsedEvent = tokenFactory.interface.parseLog(event);
-      const [creator, tokenAddress, bondingCurveAddress] = parsedEvent.args;
+      // Parse the event data - all parameters are indexed so they're in topics
+      const tokenAddress = ethers.utils.getAddress('0x' + event.topics[2].slice(26));
+      const bondingCurveAddress = ethers.utils.getAddress('0x' + event.topics[3].slice(26));
 
-      // Increase the wait time before verification
-      setDeploymentStatus('Waiting for blockchain confirmation...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Verify the deployment
+      setDeploymentStatus('Verifying deployment...');
+      await verifyTokenDeployment(provider, tokenAddress, bondingCurveAddress);
 
-      // Try verification multiple times
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          const [verifiedBondingCurve, isActive] = await tokenFactory.getTokenInfo(tokenAddress);
-          
-          if (!isActive || verifiedBondingCurve !== bondingCurveAddress) {
-            throw new Error("Token verification failed");
-          }
-          
-          setDeploymentStatus('Token deployed and verified successfully!');
-          
-          return {
-            tokenAddress,
-            bondingCurveAddress,
-            txHash: tx.hash
-          };
-        } catch (verifyError) {
-          console.error(`Verification attempt ${4 - retries} failed:`, verifyError);
-          retries--;
-          if (retries > 0) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
-      }
-
-      // If verification fails but we have the addresses, return them anyway
-      console.warn('Token deployed but verification failed after multiple attempts');
-      setDeploymentStatus('Token deployed successfully! (Verification pending)');
-      
       return {
         tokenAddress,
         bondingCurveAddress,

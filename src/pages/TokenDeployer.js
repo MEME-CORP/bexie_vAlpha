@@ -252,42 +252,49 @@ function TokenDeployer({ account }) {
       console.log('Transaction logs:', receipt.logs);
 
       // In deployTokenToBlockchain function, after receipt.wait()
-      let createdContractAddress = receipt.creates;
+      let createdContractAddress = null;
       let bondingCurveAddress = null;
-      
-      if (!createdContractAddress) {
-        // If creates is not available, try to get it from the logs
-        const nonFactoryAddresses = receipt.logs
-          .filter(log => log.address !== TOKEN_FACTORY_ADDRESS)
-          .map(log => log.address);
 
-        // First non-factory address is the token
-        createdContractAddress = nonFactoryAddresses[0];
-        // Second non-factory address is the bonding curve
-        bondingCurveAddress = nonFactoryAddresses[1];
-      }
-
-      if (!createdContractAddress) {
-        throw new Error("Could not determine created contract address");
-      }
-
-      if (!bondingCurveAddress) {
-        // Try to get bonding curve from token info
+      // Parse the TokenCreated event to get both addresses
+      const tokenCreatedEvent = receipt.logs.find(log => {
         try {
-          [bondingCurveAddress] = await tokenFactory.getTokenInfo(createdContractAddress);
-        } catch (error) {
-          console.warn("Could not get bonding curve address from token info:", error);
+          const parsed = tokenFactory.interface.parseLog(log);
+          return parsed.name === 'TokenCreated';
+        } catch {
+          return false;
+        }
+      });
+
+      if (tokenCreatedEvent) {
+        const parsedEvent = tokenFactory.interface.parseLog(tokenCreatedEvent);
+        createdContractAddress = parsedEvent.args.token;
+        bondingCurveAddress = parsedEvent.args.bondingCurve;
+      } else {
+        // Fallback to looking at non-event logs
+        const nonFactoryAddresses = receipt.logs
+          .filter(log => log.address === TOKEN_FACTORY_ADDRESS)
+          .map(log => '0x' + log.topics[2].slice(26));
+        
+        if (nonFactoryAddresses.length >= 2) {
+          createdContractAddress = nonFactoryAddresses[0];
+          bondingCurveAddress = nonFactoryAddresses[1];
         }
       }
 
-      // Increase the wait time before verification
-      setDeploymentStatus('Waiting for blockchain confirmation...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      if (!createdContractAddress || !bondingCurveAddress) {
+        throw new Error("Could not determine contract addresses");
+      }
+
+      // Remove the attempt to get bonding curve from token info since we have it from the event
+      console.log('Captured addresses:', {
+        token: createdContractAddress,
+        bondingCurve: bondingCurveAddress
+      });
 
       // Return both addresses
       return {
         tokenAddress: createdContractAddress,
-        bondingCurveAddress,
+        bondingCurveAddress, // This will now be the correct bonding curve address
         txHash: tx.hash
       };
 

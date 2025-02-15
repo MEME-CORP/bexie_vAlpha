@@ -39,29 +39,59 @@ function TokenDetail() {
     }
 
     try {
+      // Add MetaMask connection check
+      if (!window.ethereum) {
+        setMarketInfo({
+          beraPriceUSD: "0",
+          tokenPriceUSD: "0",
+          remainingSupply: "1000000000",
+          soldTokens: "0",
+          isLiquidityDeployed: false
+        });
+        setIsLoadingMarket(false);
+        return;
+      }
+
       const provider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      // Add request throttling
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const bondingCurve = new ethers.Contract(
         bondingCurveAddress,
-        BONDING_CURVE_ABI,
+        [
+          "function getBeraPrice() view returns (uint256)",
+          "function getCurrentPrice() view returns (uint256)",
+          "function totalSupplyTokens() view returns (uint256)",
+          "function liquidityDeployed() view returns (bool)"
+        ],
         provider
       );
 
-      // Fetch market data
-      const [beraPrice, tokenPrice, remainingSupply] = await Promise.all([
-        bondingCurve.getBeraPrice().catch(() => ethers.BigNumber.from(0)),
-        bondingCurve.getCurrentPrice().catch(() => ethers.BigNumber.from(0)),
-        bondingCurve.totalSupplyTokens().catch(() => ethers.utils.parseEther("1000000000"))
-      ]);
+      // Sequential calls with individual error handling
+      const beraPrice = await bondingCurve.getBeraPrice()
+        .catch(() => ethers.BigNumber.from(0));
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const tokenPrice = await bondingCurve.getCurrentPrice()
+        .catch(() => ethers.BigNumber.from(0));
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const remainingSupply = await bondingCurve.totalSupplyTokens()
+        .catch(() => ethers.utils.parseEther("1000000000"));
 
-      // Try to get liquidity status but don't block on it
+      // Handle liquidity check separately
       let isLiquidityDeployed = false;
       try {
+        await new Promise(resolve => setTimeout(resolve, 500));
         isLiquidityDeployed = await bondingCurve.liquidityDeployed();
       } catch (e) {
-        console.warn('Could not check liquidity status:', e);
+        console.warn('Could not check liquidity status - assuming false');
       }
 
-      const totalSupply = ethers.utils.parseEther("1000000000"); // 1B tokens
+      const totalSupply = ethers.utils.parseEther("1000000000");
       const soldTokens = totalSupply.sub(remainingSupply);
 
       setMarketInfo({
@@ -71,8 +101,10 @@ function TokenDetail() {
         soldTokens: ethers.utils.formatEther(soldTokens),
         isLiquidityDeployed
       });
+
     } catch (error) {
       console.error('Error fetching market info:', error);
+      // Provide fallback values instead of error
       setMarketInfo({
         beraPriceUSD: "0",
         tokenPriceUSD: "0",
@@ -80,7 +112,6 @@ function TokenDetail() {
         soldTokens: "0",
         isLiquidityDeployed: false
       });
-      setError('Failed to load market information');
     } finally {
       setIsLoadingMarket(false);
     }

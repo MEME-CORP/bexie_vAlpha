@@ -190,44 +190,36 @@ function TokenDetail() {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      const purchaseValue = ethers.utils.parseEther(purchaseAmount);
-
-      // Use correct ABI with minTokens parameter
+      // Simple bonding curve interface - match test pattern
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        ["function buyTokens(uint256 minTokens) payable"],
+        ["function buyTokens(uint256) payable"],
         signer
       );
 
-      setPurchaseStatus('Creating transaction...');
+      const buyAmount = ethers.utils.parseEther(purchaseAmount);
+
+      setPurchaseStatus('Sending transaction...');
       
-      // Set minTokens to 1 and use reasonable gas limit
+      // Match test's simple purchase pattern
       const tx = await bondingCurve.buyTokens(
         1, // minTokens parameter
         { 
-          value: purchaseValue,
-          gasLimit: 100000 // Same as working test
+          value: buyAmount,
+          gasLimit: 100000 // Same as test
         }
       );
 
       setPurchaseStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Use same success check
-      let success = false;
-      for (const log of receipt.logs) {
-        if (log.address === token.bonding_curve_contract_address) {
-          success = true;
-          break;
-        }
-      }
-
-      if (success) {
+      if (receipt.status === 1) {
         setPurchaseStatus('Purchase successful!');
         setPurchaseAmount('');
+        // Refresh market info after successful purchase
         await fetchMarketInfo(token.bonding_curve_contract_address);
       } else {
-        throw new Error('Purchase verification failed');
+        throw new Error('Transaction failed');
       }
 
     } catch (error) {

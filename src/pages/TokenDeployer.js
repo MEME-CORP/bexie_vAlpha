@@ -274,44 +274,16 @@ function TokenDeployer({ account }) {
         logoUrl = await uploadLogo(formData.tokenLogo);
       }
 
-      // Get user ID
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id;
-      if (!userId) throw new Error('User not authenticated');
-
-      // Prepare token data with correct addresses
-      const tokenData = {
-        user_id: userId,
-        token_name: formData.tokenName.trim(),
-        token_symbol: formData.tokenSymbol.trim().toUpperCase(),
-        token_description: formData.tokenDescription.trim(),
-        logo_url: logoUrl,
-        x_link: formData.twitterUrl.trim() || null,
-        telegram_link: formData.telegramUrl.trim() || null,
-        use_bexie: formData.websiteOption === 'create',
-        website_link: formData.websiteOption === 'existing' ? 
-          formData.websiteUrl.trim() : null,
-        tx_hash: tx.hash,
-        contract_address: tokenAddress,
-        bonding_curve_contract_address: bondingCurveAddress
+      // Return the addresses and hash
+      return {
+        tokenAddress,
+        bondingCurveAddress,
+        txHash: tx.hash
       };
 
-      // Insert token data
-      const { error: tokenError } = await supabase
-        .from('tokens')
-        .insert([tokenData]);
-
-      if (tokenError) throw tokenError;
-
-      alert('Token deployed and saved successfully!');
-      navigate('/');
-      
     } catch (error) {
       console.error('Error in deployment process:', error);
-      setError(error.message || 'Failed to deploy token');
-    } finally {
-      setIsSubmitting(false);
-      setDeploymentStatus('');
+      throw error;
     }
   };
 
@@ -330,23 +302,24 @@ function TokenDeployer({ account }) {
     }
   };
 
-  // Update handleBeraConfirmation to handle missing bondingCurveAddress
+  // Update handleBeraConfirmation to use createOrGetUser
   const handleBeraConfirmation = async (beraAmount) => {
     setIsModalOpen(false);
     setIsSubmitting(true);
     setError(null);
 
     try {
+      // Get deployment data
       const { tokenAddress, bondingCurveAddress, txHash } = 
         await deployTokenToBlockchain(beraAmount);
 
-      // Get or create user
+      // Get or create user first
       const userId = await createOrGetUser();
 
       // Upload logo
       const logoUrl = await uploadLogo(formData.tokenLogo);
 
-      // Prepare token data matching database structure
+      // Prepare and insert token data
       const tokenData = {
         user_id: userId,
         token_name: formData.tokenName.trim(),
@@ -363,7 +336,6 @@ function TokenDeployer({ account }) {
         bonding_curve_contract_address: bondingCurveAddress
       };
 
-      // Insert token data
       const { error: tokenError } = await supabase
         .from('tokens')
         .insert([tokenData]);

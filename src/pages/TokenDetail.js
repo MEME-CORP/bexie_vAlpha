@@ -7,16 +7,9 @@ import { ethers } from 'ethers';
 // Update the Bonding Curve ABI to include all necessary functions
 const BONDING_CURVE_ABI = [
   "function buyTokens(uint256 minTokens) payable",
-  "function buyTokensFor(address beneficiary) payable",
   "function getCurrentPrice() view returns (uint256)",
   "function getBeraPrice() view returns (uint256)",
-  "function totalSupplyTokens() view returns (uint256)",
-  "function getSellPrice(uint256 tokenAmount) view returns (uint256)",
-  "function sellTokens(uint256 tokenAmount) returns (uint256)",
-  "function liquidityDeployed() view returns (bool)",
-  "function collectedBeraUSD() view returns (uint256)",
-  "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)",
-  "event TokensSold(address indexed seller, uint256 tokens, uint256 beraAmount)"
+  "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)"
 ];
 
 function TokenDetail() {
@@ -159,55 +152,68 @@ function TokenDetail() {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Use the same pattern as TokenDeployer
-      const purchaseValue = ethers.utils.parseEther(purchaseAmount);
-      const totalValue = purchaseValue; // No creation fee needed here
-
-      // Initialize contract with minimal ABI (same as working version)
+      // Initialize contract with full ABI
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        ["function buyTokens(uint256) payable"],
+        BONDING_CURVE_ABI,
         signer
       );
 
+      // Get current price info for validation
+      const [beraPrice, currentPrice] = await Promise.all([
+        bondingCurve.getBeraPrice(),
+        bondingCurve.getCurrentPrice()
+      ]);
+
+      const purchaseValue = ethers.utils.parseEther(purchaseAmount);
+      
       setPurchaseStatus('Creating transaction...');
       
-      // Use the same transaction pattern that works in TokenDeployer
+      // Match the test implementation exactly
       const tx = await bondingCurve.buyTokens(
-        ethers.BigNumber.from("1"),
+        1, // minTokens parameter as used in test
         { 
-          value: totalValue,
-          gasLimit: 3000000 // Same gas limit as TokenDeployer
+          value: purchaseValue,
+          gasLimit: 200000 // Increased gas limit
         }
       );
 
       setPurchaseStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Use the same log parsing pattern that works in TokenDeployer
-      let success = false;
-      for (const log of receipt.logs) {
-        if (log.address === token.bonding_curve_contract_address) {
-          success = true;
-          break;
+      // Parse events like in the test
+      const event = receipt.logs.find(log => {
+        try {
+          return bondingCurve.interface.parseLog(log)?.name === "TokensPurchased";
+        } catch {
+          return false;
         }
-      }
+      });
 
-      if (success) {
-        setPurchaseStatus('Purchase successful!');
+      if (event) {
+        const parsedEvent = bondingCurve.interface.parseLog(event);
+        const tokensReceived = parsedEvent.args.tokens;
+        setPurchaseStatus(`Successfully purchased ${ethers.utils.formatEther(tokensReceived)} tokens!`);
         setPurchaseAmount('');
         
-        // Refresh market info after successful purchase
+        // Refresh market info
         await fetchMarketInfo(token.bonding_curve_contract_address);
       } else {
-        throw new Error('Purchase verification failed');
+        throw new Error('Purchase event not found in transaction');
       }
 
     } catch (error) {
       console.error('Purchase error:', error);
-      setError(error.message.includes('user rejected') ? 
-        'Transaction was rejected by user' : 
-        'Failed to complete purchase');
+      // More specific error handling
+      let errorMessage = 'Failed to complete purchase';
+      if (error.message.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient BERA balance';
+      } else if (error.error?.message) {
+        errorMessage = error.error.message;
+      }
+      setError(errorMessage);
       setPurchaseStatus('');
     }
   };

@@ -10,7 +10,7 @@ const TOKEN_FACTORY_ADDRESS = "0x547290255f50f524e0dCe4eF00E18DC60911336A";
 const BERA_USD_PRICE_FEED = "0x11B714817cBC92D402383cFd3f1037B122dcf69A";
 const CREATION_FEE = ethers.utils.parseEther("0.002");
 
-// Update the factory ABI to match the actual contract events...
+// Update the factory ABI to match the actual contract events
 const FACTORY_ABI = [
   "function createToken(string name, string symbol, uint256 totalSupply, address priceFeed) payable returns (address)",
   // Update the event signature to match the actual contract
@@ -251,58 +251,56 @@ function TokenDeployer({ account }) {
       console.log('Transaction receipt:', receipt);
       console.log('Transaction logs:', receipt.logs);
 
-      // Replace the address extraction code
-      const tokenCreatedEvent = receipt.logs.find(log => {
-        try {
-          const parsed = tokenFactory.interface.parseLog(log);
-          return parsed.name === 'TokenCreated';
-        } catch {
-          return false;
-        }
-      });
+      // In deployTokenToBlockchain function, after receipt.wait()
+      let createdContractAddress = receipt.creates;
+      let bondingCurveAddress = null;
+      
+      if (!createdContractAddress) {
+        // If creates is not available, try to get it from the logs
+        const nonFactoryAddresses = receipt.logs
+          .filter(log => log.address !== TOKEN_FACTORY_ADDRESS)
+          .map(log => log.address);
 
-      if (!tokenCreatedEvent) {
-        throw new Error('TokenCreated event not found in transaction logs');
+        // First non-factory address is the token
+        createdContractAddress = nonFactoryAddresses[0];
+        // Second non-factory address is the bonding curve
+        bondingCurveAddress = nonFactoryAddresses[1];
       }
 
-      const parsedEvent = tokenFactory.interface.parseLog(tokenCreatedEvent);
-      const tokenAddress = parsedEvent.args.token;
-      const bondingCurveAddress = parsedEvent.args.bondingCurve;
+      if (!createdContractAddress) {
+        throw new Error("Could not determine created contract address");
+      }
 
-      console.log('Extracted addresses:', {
-        token: tokenAddress,
-        bondingCurve: bondingCurveAddress
-      });
+      if (!bondingCurveAddress) {
+        // Try to get bonding curve from token info
+        try {
+          [bondingCurveAddress] = await tokenFactory.getTokenInfo(createdContractAddress);
+        } catch (error) {
+          console.warn("Could not get bonding curve address from token info:", error);
+        }
+      }
 
-      // Update database with correct addresses
-      const { data, error: uploadError } = await supabase
-        .from('tokens')
-        .insert([
-          {
-            user_id: account.id,
-            token_name: formData.tokenName.trim(),
-            token_symbol: formData.tokenSymbol.trim().toUpperCase(),
-            token_description: formData.tokenDescription.trim(),
-            logo_url: logoUrl,
-            telegram_link: formData.telegramUrl,
-            x_link: formData.twitterUrl,
-            website_link: formData.websiteUrl,
-            tx_hash: receipt.hash,
-            contract_address: tokenAddress,
-            bonding_curve_contract_address: bondingCurveAddress // Store correct bonding curve address
-          }
-        ])
-        .select();
+      // Increase the wait time before verification
+      setDeploymentStatus('Waiting for blockchain confirmation...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
-      if (uploadError) throw uploadError;
-
-      setDeploymentStatus('Token deployed successfully!');
-      navigate(`/token/${data[0].id}`);
+      // Return both addresses
+      return {
+        tokenAddress: createdContractAddress,
+        bondingCurveAddress,
+        txHash: tx.hash
+      };
 
     } catch (error) {
       console.error('Blockchain deployment error:', error);
-      setError('Deployment failed: ' + error.message);
-      setIsSubmitting(false);
+      if (error.message.includes('user rejected transaction')) {
+        throw new Error('Transaction was rejected by user');
+      }
+      // Add more descriptive error message
+      const errorMessage = error.message.includes('execution reverted') 
+        ? 'Transaction failed: Please check your token parameters and try again'
+        : `Deployment failed: ${error.message}`;
+      throw new Error(errorMessage);
     }
   };
 

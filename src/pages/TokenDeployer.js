@@ -207,100 +207,92 @@ function TokenDeployer({ account }) {
         throw new Error("Please install MetaMask to deploy tokens");
       }
 
-      setDeploymentStatus('Initiating deployment...');
-      
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      
-      const purchaseAmount = ethers.utils.parseEther(beraAmount);
-      const totalValue = CREATION_FEE.add(purchaseAmount);
-
+      // Create contract instance
       const tokenFactory = new ethers.Contract(
         TOKEN_FACTORY_ADDRESS,
         FACTORY_ABI,
         signer
       );
 
-      setDeploymentStatus('Creating token...');
+      setDeploymentStatus('Deploying token to blockchain...');
       
-      console.log('Starting token deployment...');
-      console.log('Sending transaction with params:', {
-        name: formData.tokenName.trim(),
-        symbol: formData.tokenSymbol.trim().toUpperCase(),
-        totalSupply: "1000000000",
-        priceFeed: BERA_USD_PRICE_FEED,
-        value: totalValue.toString()
-      });
-
+      // Deploy token with creation fee
       const tx = await tokenFactory.createToken(
         formData.tokenName.trim(),
         formData.tokenSymbol.trim().toUpperCase(),
-        ethers.BigNumber.from("1000000000"),
+        1000000000, // 1B tokens
         BERA_USD_PRICE_FEED,
-        { 
-          value: totalValue,
-          gasLimit: 3000000
-        }
+        { value: CREATION_FEE }
       );
 
-      setDeploymentStatus('Waiting for confirmation...');
+      setDeploymentStatus('Waiting for transaction confirmation...');
       const receipt = await tx.wait();
 
-      console.log('Transaction receipt:', receipt);
-      console.log('Transaction logs:', receipt.logs);
-
-      // In deployTokenToBlockchain function, after receipt.wait()
-      let createdContractAddress = receipt.creates;
-      let bondingCurveAddress = null;
-      
-      if (!createdContractAddress) {
-        // If creates is not available, try to get it from the logs
-        const nonFactoryAddresses = receipt.logs
-          .filter(log => log.address !== TOKEN_FACTORY_ADDRESS)
-          .map(log => log.address);
-
-        // First non-factory address is the token
-        createdContractAddress = nonFactoryAddresses[0];
-        // Second non-factory address is the bonding curve
-        bondingCurveAddress = nonFactoryAddresses[1];
-      }
-
-      if (!createdContractAddress) {
-        throw new Error("Could not determine created contract address");
-      }
-
-      if (!bondingCurveAddress) {
-        // Try to get bonding curve from token info
+      // Find the TokenCreated event
+      const event = receipt.logs.find(log => {
         try {
-          [bondingCurveAddress] = await tokenFactory.getTokenInfo(createdContractAddress);
-        } catch (error) {
-          console.warn("Could not get bonding curve address from token info:", error);
+          return tokenFactory.interface.parseLog(log)?.name === 'TokenCreated';
+        } catch {
+          return false;
         }
+      });
+
+      if (!event) {
+        throw new Error('TokenCreated event not found in transaction');
       }
 
-      // Increase the wait time before verification
-      setDeploymentStatus('Waiting for blockchain confirmation...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      const parsedEvent = tokenFactory.interface.parseLog(event);
+      const tokenAddress = parsedEvent.args.tokenAddress;
+      const bondingCurveAddress = parsedEvent.args.bondingCurveAddress;
 
-      // Return both addresses
-      return {
-        tokenAddress: createdContractAddress,
-        bondingCurveAddress,
-        txHash: tx.hash
+      // Upload logo if provided
+      let logoUrl = null;
+      if (formData.tokenLogo) {
+        setDeploymentStatus('Uploading logo...');
+        logoUrl = await uploadLogo(formData.tokenLogo);
+      }
+
+      // Get user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) throw new Error('User not authenticated');
+
+      // Prepare token data with correct addresses
+      const tokenData = {
+        user_id: userId,
+        token_name: formData.tokenName.trim(),
+        token_symbol: formData.tokenSymbol.trim().toUpperCase(),
+        token_description: formData.tokenDescription.trim(),
+        logo_url: logoUrl,
+        x_link: formData.twitterUrl.trim() || null,
+        telegram_link: formData.telegramUrl.trim() || null,
+        use_bexie: formData.websiteOption === 'create',
+        website_link: formData.websiteOption === 'existing' ? 
+          formData.websiteUrl.trim() : null,
+        tx_hash: tx.hash,
+        contract_address: tokenAddress,
+        bonding_curve_contract_address: bondingCurveAddress // Store bonding curve address
       };
 
+      // Insert token data
+      const { error: tokenError } = await supabase
+        .from('tokens')
+        .insert([tokenData]);
+
+      if (tokenError) throw tokenError;
+
+      alert('Token deployed and saved successfully!');
+      navigate('/');
+      
     } catch (error) {
-      console.error('Blockchain deployment error:', error);
-      if (error.message.includes('user rejected transaction')) {
-        throw new Error('Transaction was rejected by user');
-      }
-      // Add more descriptive error message
-      const errorMessage = error.message.includes('execution reverted') 
-        ? 'Transaction failed: Please check your token parameters and try again'
-        : `Deployment failed: ${error.message}`;
-      throw new Error(errorMessage);
+      console.error('Error in deployment process:', error);
+      setError(error.message || 'Failed to deploy token');
+    } finally {
+      setIsSubmitting(false);
+      setDeploymentStatus('');
     }
   };
 

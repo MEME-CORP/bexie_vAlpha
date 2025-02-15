@@ -229,7 +229,7 @@ function TokenDeployer({ account }) {
       console.log('Sending transaction with params:', {
         name: formData.tokenName.trim(),
         symbol: formData.tokenSymbol.trim().toUpperCase(),
-        totalSupply: "1000000000000000000000000000",
+        totalSupply: "1000000000",
         priceFeed: BERA_USD_PRICE_FEED,
         value: totalValue.toString()
       });
@@ -237,7 +237,7 @@ function TokenDeployer({ account }) {
       const tx = await tokenFactory.createToken(
         formData.tokenName.trim(),
         formData.tokenSymbol.trim().toUpperCase(),
-        ethers.BigNumber.from("1000000000000000000000000000"),
+        ethers.BigNumber.from("1000000000"),
         BERA_USD_PRICE_FEED,
         { 
           value: totalValue,

@@ -13,7 +13,6 @@ const CREATION_FEE = ethers.utils.parseEther("0.002");
 // Update the factory ABI to match the actual contract events
 const FACTORY_ABI = [
   "function createToken(string name, string symbol, uint256 totalSupply, address priceFeed) payable returns (address)",
-  // Update the event signature to match the actual contract
   "event TokenCreated(address indexed creator, address indexed token, address indexed bondingCurve)",
   "function getTokenInfo(address token) view returns (address bondingCurve, bool isActive)",
   "function getBondingCurveInfo(address bondingCurve) view returns (uint256 price, uint256 supply)"
@@ -207,46 +206,66 @@ function TokenDeployer({ account }) {
         throw new Error("Please install MetaMask to deploy tokens");
       }
 
+      setDeploymentStatus('Initiating deployment...');
+      
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Create contract instance
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      
+      const purchaseAmount = ethers.utils.parseEther(beraAmount);
+      const totalValue = CREATION_FEE.add(purchaseAmount);
+
       const tokenFactory = new ethers.Contract(
         TOKEN_FACTORY_ADDRESS,
         FACTORY_ABI,
         signer
       );
 
-      setDeploymentStatus('Deploying token to blockchain...');
+      setDeploymentStatus('Creating token...');
       
-      // Deploy token with creation fee
+      console.log('Starting token deployment with:', {
+        name: formData.tokenName.trim(),
+        symbol: formData.tokenSymbol.trim().toUpperCase(),
+        value: totalValue.toString()
+      });
+
       const tx = await tokenFactory.createToken(
         formData.tokenName.trim(),
         formData.tokenSymbol.trim().toUpperCase(),
-        1000000000, // 1B tokens
+        ethers.BigNumber.from("1000000000"),
         BERA_USD_PRICE_FEED,
-        { value: CREATION_FEE }
+        { 
+          value: totalValue,
+          gasLimit: 3000000
+        }
       );
 
-      setDeploymentStatus('Waiting for transaction confirmation...');
+      setDeploymentStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Find the TokenCreated event
-      const event = receipt.logs.find(log => {
+      // Find TokenCreated event using indexed parameters
+      const tokenCreatedEvent = receipt.logs.find(log => {
         try {
-          return tokenFactory.interface.parseLog(log)?.name === 'TokenCreated';
+          const parsed = tokenFactory.interface.parseLog(log);
+          return parsed.name === 'TokenCreated';
         } catch {
           return false;
         }
       });
 
-      if (!event) {
-        throw new Error('TokenCreated event not found in transaction');
+      if (!tokenCreatedEvent) {
+        throw new Error('TokenCreated event not found in transaction logs');
       }
 
-      const parsedEvent = tokenFactory.interface.parseLog(event);
-      const tokenAddress = parsedEvent.args.tokenAddress;
-      const bondingCurveAddress = parsedEvent.args.bondingCurveAddress;
+      const parsedEvent = tokenFactory.interface.parseLog(tokenCreatedEvent);
+      const tokenAddress = parsedEvent.args.token;
+      const bondingCurveAddress = parsedEvent.args.bondingCurve;
+
+      console.log('Extracted addresses:', {
+        token: tokenAddress,
+        bondingCurve: bondingCurveAddress
+      });
 
       // Upload logo if provided
       let logoUrl = null;
@@ -274,7 +293,7 @@ function TokenDeployer({ account }) {
           formData.websiteUrl.trim() : null,
         tx_hash: tx.hash,
         contract_address: tokenAddress,
-        bonding_curve_contract_address: bondingCurveAddress // Store bonding curve address
+        bonding_curve_contract_address: bondingCurveAddress
       };
 
       // Insert token data

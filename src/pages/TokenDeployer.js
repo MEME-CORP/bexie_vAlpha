@@ -251,11 +251,7 @@ function TokenDeployer({ account }) {
       console.log('Transaction receipt:', receipt);
       console.log('Transaction logs:', receipt.logs);
 
-      // In deployTokenToBlockchain function, after receipt.wait()
-      let createdContractAddress = null;
-      let bondingCurveAddress = null;
-
-      // Parse the TokenCreated event to get both addresses
+      // Replace the address extraction code
       const tokenCreatedEvent = receipt.logs.find(log => {
         try {
           const parsed = tokenFactory.interface.parseLog(log);
@@ -265,49 +261,48 @@ function TokenDeployer({ account }) {
         }
       });
 
-      if (tokenCreatedEvent) {
-        const parsedEvent = tokenFactory.interface.parseLog(tokenCreatedEvent);
-        createdContractAddress = parsedEvent.args.token;
-        bondingCurveAddress = parsedEvent.args.bondingCurve;
-      } else {
-        // Fallback to looking at non-event logs
-        const nonFactoryAddresses = receipt.logs
-          .filter(log => log.address === TOKEN_FACTORY_ADDRESS)
-          .map(log => '0x' + log.topics[2].slice(26));
-        
-        if (nonFactoryAddresses.length >= 2) {
-          createdContractAddress = nonFactoryAddresses[0];
-          bondingCurveAddress = nonFactoryAddresses[1];
-        }
+      if (!tokenCreatedEvent) {
+        throw new Error('TokenCreated event not found in transaction logs');
       }
 
-      if (!createdContractAddress || !bondingCurveAddress) {
-        throw new Error("Could not determine contract addresses");
-      }
+      const parsedEvent = tokenFactory.interface.parseLog(tokenCreatedEvent);
+      const tokenAddress = parsedEvent.args.token;
+      const bondingCurveAddress = parsedEvent.args.bondingCurve;
 
-      // Remove the attempt to get bonding curve from token info since we have it from the event
-      console.log('Captured addresses:', {
-        token: createdContractAddress,
+      console.log('Extracted addresses:', {
+        token: tokenAddress,
         bondingCurve: bondingCurveAddress
       });
 
-      // Return both addresses
-      return {
-        tokenAddress: createdContractAddress,
-        bondingCurveAddress, // This will now be the correct bonding curve address
-        txHash: tx.hash
-      };
+      // Update database with correct addresses
+      const { data, error: uploadError } = await supabase
+        .from('tokens')
+        .insert([
+          {
+            user_id: account.id,
+            token_name: formData.tokenName.trim(),
+            token_symbol: formData.tokenSymbol.trim().toUpperCase(),
+            token_description: formData.tokenDescription.trim(),
+            logo_url: logoUrl,
+            telegram_link: formData.telegramUrl,
+            x_link: formData.twitterUrl,
+            website_link: formData.websiteUrl,
+            tx_hash: receipt.hash,
+            contract_address: tokenAddress,
+            bonding_curve_contract_address: bondingCurveAddress // Store correct bonding curve address
+          }
+        ])
+        .select();
+
+      if (uploadError) throw uploadError;
+
+      setDeploymentStatus('Token deployed successfully!');
+      navigate(`/token/${data[0].id}`);
 
     } catch (error) {
       console.error('Blockchain deployment error:', error);
-      if (error.message.includes('user rejected transaction')) {
-        throw new Error('Transaction was rejected by user');
-      }
-      // Add more descriptive error message
-      const errorMessage = error.message.includes('execution reverted') 
-        ? 'Transaction failed: Please check your token parameters and try again'
-        : `Deployment failed: ${error.message}`;
-      throw new Error(errorMessage);
+      setError('Deployment failed: ' + error.message);
+      setIsSubmitting(false);
     }
   };
 

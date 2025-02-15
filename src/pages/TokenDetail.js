@@ -7,9 +7,16 @@ import { ethers } from 'ethers';
 // Update the Bonding Curve ABI to include all necessary functions
 const BONDING_CURVE_ABI = [
   "function buyTokens(uint256 minTokens) payable",
+  "function buyTokensFor(address beneficiary) payable",
   "function getCurrentPrice() view returns (uint256)",
   "function getBeraPrice() view returns (uint256)",
-  "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)"
+  "function totalSupplyTokens() view returns (uint256)",
+  "function getSellPrice(uint256 tokenAmount) view returns (uint256)",
+  "function sellTokens(uint256 tokenAmount) returns (uint256)",
+  "function liquidityDeployed() view returns (bool)",
+  "function collectedBeraUSD() view returns (uint256)",
+  "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)",
+  "event TokensSold(address indexed seller, uint256 tokens, uint256 beraAmount)"
 ];
 
 function TokenDetail() {
@@ -152,68 +159,51 @@ function TokenDetail() {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Initialize contract with full ABI
+      const purchaseValue = ethers.utils.parseEther(purchaseAmount);
+
+      // Use correct ABI with minTokens parameter
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        BONDING_CURVE_ABI,
+        ["function buyTokens(uint256 minTokens) payable"],
         signer
       );
 
-      // Get current price info for validation
-      const [beraPrice, currentPrice] = await Promise.all([
-        bondingCurve.getBeraPrice(),
-        bondingCurve.getCurrentPrice()
-      ]);
-
-      const purchaseValue = ethers.utils.parseEther(purchaseAmount);
-      
       setPurchaseStatus('Creating transaction...');
       
-      // Match the test implementation exactly
+      // Set minTokens to 1 and use reasonable gas limit
       const tx = await bondingCurve.buyTokens(
-        1, // minTokens parameter as used in test
+        1, // minTokens parameter
         { 
           value: purchaseValue,
-          gasLimit: 200000 // Increased gas limit
+          gasLimit: 100000 // Same as working test
         }
       );
 
       setPurchaseStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Parse events like in the test
-      const event = receipt.logs.find(log => {
-        try {
-          return bondingCurve.interface.parseLog(log)?.name === "TokensPurchased";
-        } catch {
-          return false;
+      // Use same success check
+      let success = false;
+      for (const log of receipt.logs) {
+        if (log.address === token.bonding_curve_contract_address) {
+          success = true;
+          break;
         }
-      });
+      }
 
-      if (event) {
-        const parsedEvent = bondingCurve.interface.parseLog(event);
-        const tokensReceived = parsedEvent.args.tokens;
-        setPurchaseStatus(`Successfully purchased ${ethers.utils.formatEther(tokensReceived)} tokens!`);
+      if (success) {
+        setPurchaseStatus('Purchase successful!');
         setPurchaseAmount('');
-        
-        // Refresh market info
         await fetchMarketInfo(token.bonding_curve_contract_address);
       } else {
-        throw new Error('Purchase event not found in transaction');
+        throw new Error('Purchase verification failed');
       }
 
     } catch (error) {
       console.error('Purchase error:', error);
-      // More specific error handling
-      let errorMessage = 'Failed to complete purchase';
-      if (error.message.includes('user rejected')) {
-        errorMessage = 'Transaction was rejected by user';
-      } else if (error.message.includes('insufficient funds')) {
-        errorMessage = 'Insufficient BERA balance';
-      } else if (error.error?.message) {
-        errorMessage = error.error.message;
-      }
-      setError(errorMessage);
+      setError(error.message.includes('user rejected') ? 
+        'Transaction was rejected by user' : 
+        'Failed to complete purchase');
       setPurchaseStatus('');
     }
   };

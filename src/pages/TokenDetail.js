@@ -159,55 +159,55 @@ function TokenDetail() {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Format BERA amount properly
-      const beraAmount = ethers.utils.parseEther(purchaseAmount);
-      
-      // Initialize contract with correct ABI
+      // Use the same pattern as TokenDeployer
+      const purchaseValue = ethers.utils.parseEther(purchaseAmount);
+      const totalValue = purchaseValue; // No creation fee needed here
+
+      // Initialize contract with minimal ABI (same as working version)
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        [
-          "function buyTokens(uint256 minTokens) payable",
-          "function buyTokensFor(address beneficiary) payable",
-          "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)"
-        ],
+        ["function buyTokens(uint256) payable"],
         signer
       );
 
-      // Execute purchase with minimum tokens parameter
+      setPurchaseStatus('Creating transaction...');
+      
+      // Use the same transaction pattern that works in TokenDeployer
       const tx = await bondingCurve.buyTokens(
-        1, // minTokens parameter (unused but required)
+        ethers.BigNumber.from("1"),
         { 
-          value: beraAmount,
-          gasLimit: 100000
+          value: totalValue,
+          gasLimit: 3000000 // Same gas limit as TokenDeployer
         }
       );
-      
-      setPurchaseStatus('Processing purchase...');
+
+      setPurchaseStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
 
-      // Find purchase event using the correct method
-      const event = receipt.logs.find(log => {
-        try {
-          return bondingCurve.interface.parseLog(log)?.name === "TokensPurchased";
-        } catch {
-          return false;
+      // Use the same log parsing pattern that works in TokenDeployer
+      let success = false;
+      for (const log of receipt.logs) {
+        if (log.address === token.bonding_curve_contract_address) {
+          success = true;
+          break;
         }
-      });
+      }
 
-      if (event) {
-        const [buyer, tokensReceived, beraSpent] = bondingCurve.interface.parseLog(event).args;
-        const formattedTokens = ethers.utils.formatEther(tokensReceived);
-        setPurchaseStatus(`Successfully purchased ${parseFloat(formattedTokens).toLocaleString()} tokens!`);
+      if (success) {
+        setPurchaseStatus('Purchase successful!');
         setPurchaseAmount('');
         
-        // Refresh market info
+        // Refresh market info after successful purchase
         await fetchMarketInfo(token.bonding_curve_contract_address);
       } else {
-        throw new Error('Purchase event not found in transaction');
+        throw new Error('Purchase verification failed');
       }
+
     } catch (error) {
       console.error('Purchase error:', error);
-      setError(error.message || 'Failed to purchase tokens');
+      setError(error.message.includes('user rejected') ? 
+        'Transaction was rejected by user' : 
+        'Failed to complete purchase');
       setPurchaseStatus('');
     }
   };

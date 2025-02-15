@@ -13,7 +13,7 @@ const CREATION_FEE = ethers.utils.parseEther("0.002");
 // Update the factory ABI to match the actual contract events
 const FACTORY_ABI = [
   "function createToken(string name, string symbol, uint256 totalSupply, address priceFeed) payable returns (address)",
-  "event TokenCreated(address indexed creator, address indexed token, address indexed bondingCurve)",
+  "event TokenCreated(address indexed creator, address tokenAddress, address bondingCurveAddress, string name, string symbol)",
   "function getTokenInfo(address token) view returns (address bondingCurve, bool isActive)",
   "function getBondingCurveInfo(address bondingCurve) view returns (uint256 price, uint256 supply)"
 ];
@@ -259,8 +259,8 @@ function TokenDeployer({ account }) {
       }
 
       const parsedEvent = tokenFactory.interface.parseLog(tokenCreatedEvent);
-      const tokenAddress = parsedEvent.args.token;
-      const bondingCurveAddress = parsedEvent.args.bondingCurve;
+      const tokenAddress = parsedEvent.args.tokenAddress;
+      const bondingCurveAddress = parsedEvent.args.bondingCurveAddress;
 
       console.log('Extracted addresses:', {
         token: tokenAddress,

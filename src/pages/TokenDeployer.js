@@ -10,7 +10,7 @@ const TOKEN_FACTORY_ADDRESS = "0x547290255f50f524e0dCe4eF00E18DC60911336A";
 const BERA_USD_PRICE_FEED = "0x11B714817cBC92D402383cFd3f1037B122dcf69A";
 const CREATION_FEE = ethers.utils.parseEther("0.002");
 
-// Update the factory ABI to match the actual contract events
+// Update the factory ABI to match the actual contract events...
 const FACTORY_ABI = [
   "function createToken(string name, string symbol, uint256 totalSupply, address priceFeed) payable returns (address)",
   // Update the event signature to match the actual contract

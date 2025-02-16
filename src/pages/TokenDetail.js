@@ -100,7 +100,7 @@ function TokenDetail() {
 
       setMarketInfo({
         beraPriceUSD: ethers.utils.formatEther(beraPrice),
-        tokenPriceUSD: (tokenPrice).toString(),
+        tokenPriceUSD: ethers.utils.formatUnits(tokenPrice, 6),
         remainingSupply: ethers.utils.formatEther(remainingSupply),
         soldTokens: ethers.utils.formatEther(soldTokens),
         isLiquidityDeployed
@@ -419,7 +419,7 @@ function TokenDetail() {
           <div className="token-detail-section">
             <h2>Market Information</h2>
             <div className="market-info">
-              <p>Current Price: ${Number(marketInfo.tokenPriceUSD).toFixed(8)} USD</p>
+              <p>Current Price: ${Number(marketInfo.tokenPriceUSD).toFixed(6)} USD</p>
               <p>Tokens Sold: {parseInt(marketInfo.soldTokens).toLocaleString()}</p>
               <p>Remaining Supply: {parseInt(marketInfo.remainingSupply).toLocaleString()}</p>
               {!marketInfo.isLiquidityDeployed && (

@@ -16,7 +16,8 @@ const BONDING_CURVE_ABI = [
   "function liquidityDeployed() view returns (bool)",
   "function collectedBeraUSD() view returns (uint256)",
   "event TokensPurchased(address indexed buyer, uint256 tokens, uint256 beraAmount)",
-  "event TokensSold(address indexed seller, uint256 tokens, uint256 beraAmount)"
+  "event TokensSold(address indexed seller, uint256 tokens, uint256 beraAmount)",
+  "function approve(address spender, uint256 amount) external returns (bool)"
 ];
 
 function TokenDetail() {
@@ -28,6 +29,8 @@ function TokenDetail() {
   const [purchaseStatus, setPurchaseStatus] = useState('');
   const [marketInfo, setMarketInfo] = useState(null);
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
+  const [sellAmount, setSellAmount] = useState('');
+  const [sellStatus, setSellStatus] = useState('');
 
   // Add function to fetch market info
   const fetchMarketInfo = async (bondingCurveAddress) => {
@@ -231,6 +234,70 @@ function TokenDetail() {
     }
   };
 
+  // Add sell function after handlePurchase
+  const handleSell = async (e) => {
+    e.preventDefault();
+    if (!window.ethereum) {
+      setError('Please install MetaMask to sell tokens');
+      return;
+    }
+
+    try {
+      setSellStatus('Initiating sale...');
+      setError(null);
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      // Create token contract interface for approval
+      const tokenContract = new ethers.Contract(
+        token.contract_address,
+        ["function approve(address spender, uint256 amount) external returns (bool)"],
+        signer
+      );
+
+      const sellAmountWei = ethers.utils.parseEther(sellAmount);
+
+      setSellStatus('Approving tokens...');
+      const approveTx = await tokenContract.approve(
+        token.bonding_curve_contract_address,
+        sellAmountWei
+      );
+      await approveTx.wait();
+
+      setSellStatus('Sending sale transaction...');
+      const bondingCurve = new ethers.Contract(
+        token.bonding_curve_contract_address,
+        ["function sellTokens(uint256 tokenAmount) returns (uint256)"],
+        signer
+      );
+
+      const tx = await bondingCurve.sellTokens(
+        sellAmountWei,
+        { gasLimit: 100000 }
+      );
+
+      setSellStatus('Waiting for confirmation...');
+      const receipt = await tx.wait();
+
+      if (receipt.status === 1) {
+        setSellStatus('Sale successful!');
+        setSellAmount('');
+        // Refresh market info after successful sale
+        await fetchMarketInfo(token.bonding_curve_contract_address);
+      } else {
+        throw new Error('Transaction failed');
+      }
+
+    } catch (error) {
+      console.error('Sale error:', error);
+      setError(error.message.includes('user rejected') ? 
+        'Transaction was rejected by user' : 
+        'Failed to complete sale');
+      setSellStatus('');
+    }
+  };
+
   if (isLoading) {
     return <div className="token-detail-container">Loading...</div>;
   }
@@ -361,6 +428,35 @@ function TokenDetail() {
             </button>
           </form>
           {purchaseStatus && <div className="status-message">{purchaseStatus}</div>}
+          {error && <div className="error-message">{error}</div>}
+        </div>
+
+        {/* Add sell form after purchase form */}
+        <div className="token-detail-section">
+          <h2>Sell Tokens</h2>
+          <form onSubmit={handleSell} className="purchase-form">
+            <div className="form-group">
+              <label htmlFor="tokenAmount">Token Amount:</label>
+              <input
+                type="number"
+                id="tokenAmount"
+                value={sellAmount}
+                onChange={(e) => setSellAmount(e.target.value)}
+                min="0"
+                step="0.01"
+                required
+                placeholder="Enter token amount"
+                className="purchase-input"
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={!sellAmount || !token?.bonding_curve_contract_address}
+            >
+              {sellStatus || 'Sell Tokens'}
+            </button>
+          </form>
+          {sellStatus && <div className="status-message">{sellStatus}</div>}
           {error && <div className="error-message">{error}</div>}
         </div>
       </div>

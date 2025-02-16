@@ -31,6 +31,7 @@ function TokenDetail() {
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [sellAmount, setSellAmount] = useState('');
   const [sellStatus, setSellStatus] = useState('');
+  const [expectedReturn, setExpectedReturn] = useState(null);
 
   // Add function to fetch market info
   const fetchMarketInfo = async (bondingCurveAddress) => {
@@ -231,6 +232,35 @@ function TokenDetail() {
         'Transaction was rejected by user' : 
         'Failed to complete purchase');
       setPurchaseStatus('');
+    }
+  };
+
+  // Add function to check sell price
+  const checkSellPrice = async (amount) => {
+    if (!amount || !window.ethereum) return;
+
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const bondingCurve = new ethers.Contract(
+        token.bonding_curve_contract_address,
+        ["function getSellPrice(uint256) view returns (uint256)"],
+        provider
+      );
+
+      const amountWei = ethers.utils.parseEther(amount);
+      const expectedBera = await bondingCurve.getSellPrice(amountWei);
+      const contractBalance = await provider.getBalance(token.bonding_curve_contract_address);
+      
+      if (expectedBera.gt(contractBalance)) {
+        setError('Insufficient contract balance for this sale');
+        setExpectedReturn(null);
+      } else {
+        setError(null);
+        setExpectedReturn(ethers.utils.formatEther(expectedBera));
+      }
+    } catch (error) {
+      console.error('Error checking sell price:', error);
+      setExpectedReturn(null);
     }
   };
 
@@ -441,7 +471,10 @@ function TokenDetail() {
                 type="number"
                 id="tokenAmount"
                 value={sellAmount}
-                onChange={(e) => setSellAmount(e.target.value)}
+                onChange={(e) => {
+                  setSellAmount(e.target.value);
+                  checkSellPrice(e.target.value);
+                }}
                 min="0"
                 step="0.01"
                 required
@@ -449,9 +482,14 @@ function TokenDetail() {
                 className="purchase-input"
               />
             </div>
+            {expectedReturn && (
+              <p className="expected-return">
+                Expected return: {expectedReturn} BERA
+              </p>
+            )}
             <button 
               type="submit" 
-              disabled={!sellAmount || !token?.bonding_curve_contract_address}
+              disabled={!sellAmount || !token?.bonding_curve_contract_address || !expectedReturn}
             >
               {sellStatus || 'Sell Tokens'}
             </button>

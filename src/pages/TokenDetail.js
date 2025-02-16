@@ -302,10 +302,7 @@ function TokenDetail() {
         signer
       );
 
-      const tx = await bondingCurve.sellTokens(
-        sellAmountWei,
-        { gasLimit: 100000 }
-      );
+      const tx = await bondingCurve.sellTokens(sellAmountWei);
 
       setSellStatus('Waiting for confirmation...');
       const receipt = await tx.wait();

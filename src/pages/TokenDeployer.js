@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAccount } from 'wagmi';
 import { supabase } from '../config/supabaseClient';
 import './TokenDeployer.css';
 import BuyBeraModal from '../components/BuyBeraModal';
@@ -18,8 +19,9 @@ const FACTORY_ABI = [
   "function getBondingCurveInfo(address bondingCurve) view returns (uint256 price, uint256 supply)"
 ];
 
-function TokenDeployer({ account }) {
+function TokenDeployer() {
   const navigate = useNavigate();
+  const { address, isConnected } = useAccount();
   const [formData, setFormData] = useState({
     tokenName: '',
     tokenSymbol: '',
@@ -36,6 +38,18 @@ function TokenDeployer({ account }) {
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deploymentStatus, setDeploymentStatus] = useState('');
+
+  // Update loading state logic
+  const [isWalletLoading, setIsWalletLoading] = useState(false);
+  
+  useEffect(() => {
+    // Check both RainbowKit connection status and account
+    if (isConnected && typeof address !== 'undefined') {
+      setIsWalletLoading(false);
+    } else if (!isConnected) {
+      setIsWalletLoading(false); // Not loading if explicitly disconnected
+    }
+  }, [address, isConnected]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -140,10 +154,14 @@ function TokenDeployer({ account }) {
 
   const createOrGetUser = async () => {
     try {
+      if (!address) {
+        throw new Error('Wallet address not available');
+      }
+
       const { data: user, error: fetchError } = await supabase
         .from('users')
         .select('id')
-        .eq('wallet_address', account)
+        .eq('wallet_address', address)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
@@ -153,7 +171,7 @@ function TokenDeployer({ account }) {
       if (!user) {
         const { data: newUser, error: insertError } = await supabase
           .from('users')
-          .insert([{ wallet_address: account }])
+          .insert([{ wallet_address: address }])
           .select('id')
           .single();
 
@@ -204,6 +222,10 @@ function TokenDeployer({ account }) {
     try {
       if (!window.ethereum) {
         throw new Error("Please install MetaMask to deploy tokens");
+      }
+
+      if (!address) {
+        throw new Error("Please connect your wallet to deploy tokens");
       }
 
       setDeploymentStatus('Initiating deployment...');
@@ -292,34 +314,42 @@ function TokenDeployer({ account }) {
     setError(null);
 
     try {
-      // Validate form
+      if (!isConnected) {
+        throw new Error('Please connect your wallet to continue');
+      }
+      
+      // Only validate form here, don't check account
       validateForm();
       
-      // Open the modal instead of proceeding with submission
+      // Open modal for transaction
       setIsModalOpen(true);
     } catch (error) {
       setError(error.message || 'Failed to validate form');
     }
   };
 
-  // Update handleBeraConfirmation to use createOrGetUser
   const handleBeraConfirmation = async (beraAmount) => {
     setIsModalOpen(false);
     setIsSubmitting(true);
     setError(null);
 
     try {
-      // Get deployment data
-      const { tokenAddress, bondingCurveAddress, txHash } = 
-        await deployTokenToBlockchain(beraAmount);
+      // Deploy token first
+      const deploymentResult = await deployTokenToBlockchain(beraAmount);
+      
+      if (!deploymentResult) {
+        throw new Error('Deployment failed');
+      }
 
-      // Get or create user first
+      const { tokenAddress, bondingCurveAddress, txHash } = deploymentResult;
+
+      // Only create user after successful deployment
       const userId = await createOrGetUser();
 
-      // Upload logo
+      // Upload logo and continue with the rest
       const logoUrl = await uploadLogo(formData.tokenLogo);
 
-      // Prepare and insert token data
+      // Prepare token data
       const tokenData = {
         user_id: userId,
         token_name: formData.tokenName.trim(),

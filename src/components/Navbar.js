@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import './Navbar.css';
 
-function Navbar({ account, onDisconnect }) {
+function Navbar({ account }) {
   return (
     <nav className="navbar">
       <div className="navbar-brand">
@@ -21,12 +22,7 @@ function Navbar({ account, onDisconnect }) {
         <Link to="/profile">Profile</Link>
       </div>
       <div className="nav-wallet">
-        <span className="wallet-address">
-          {account.slice(0, 6)}...{account.slice(-4)}
-        </span>
-        <button onClick={onDisconnect} className="disconnect-button">
-          Disconnect
-        </button>
+        <ConnectButton />
       </div>
     </nav>
   );

@@ -17,6 +17,8 @@
         --text-color: #000000;
         --card-bg: #ffffff;
         --border-color: #eaeaea;
+        --card-text: #000000;
+        --card-shadow: rgba(0, 0, 0, 0.1);
       }
       
       :root[data-theme="dark"] {
@@ -24,11 +26,36 @@
         --text-color: #ffffff;
         --card-bg: #2d2d2d;
         --border-color: #404040;
+        --card-text: #ffffff;
+        --card-shadow: rgba(0, 0, 0, 0.3);
       }
 
       body {
         background-color: var(--bg-color);
         color: var(--text-color);
+      }
+
+      /* Add card styling */
+      .card,
+      [class*="token-card"],
+      [class*="TokenCard"],
+      .token-list-item,
+      .MuiPaper-root,
+      .MuiCard-root {
+        background-color: var(--card-bg) !important;
+        color: var(--card-text) !important;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 2px 8px var(--card-shadow);
+      }
+
+      /* Ensure text inside cards is visible */
+      .card *,
+      [class*="token-card"] *,
+      [class*="TokenCard"] *,
+      .token-list-item *,
+      .MuiPaper-root *,
+      .MuiCard-root * {
+        color: var(--card-text);
       }
 
       #theme-toggle {
@@ -44,14 +71,16 @@
         align-items: center;
         justify-content: center;
         position: fixed;
-        top: 1rem;
-        right: 320px;
-        z-index: 100;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 5;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       }
 
       @media (max-width: 768px) {
         #theme-toggle {
-          right: 200px;
+          bottom: 1.5rem;
+          right: 1.5rem;
         }
       }
     </style>

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useAccount } from 'wagmi';
 import { supabase } from '../config/supabaseClient';
 import './Profile.css';
 import AgentActivationForm from '../components/AgentActivationForm';
 
-function Profile({ account }) {
+function Profile() {
+  const { address } = useAccount();
   const [tokens, setTokens] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -17,7 +19,7 @@ function Profile({ account }) {
         const { data: user, error: userError } = await supabase
           .from('users')
           .select('id')
-          .eq('wallet_address', account)
+          .eq('wallet_address', address)
           .single();
 
         if (userError) {
@@ -47,10 +49,13 @@ function Profile({ account }) {
       }
     };
 
-    if (account) {
+    if (address) {
       fetchUserTokens();
+    } else {
+      setTokens([]);
+      setIsLoading(false);
     }
-  }, [account]);
+  }, [address]);
 
   if (isLoading) {
     return (
@@ -74,7 +79,7 @@ function Profile({ account }) {
         <h1>Your Profile</h1>
         <div className="wallet-info">
           <span className="label">Connected Wallet:</span>
-          <span className="address">{account}</span>
+          <span className="address">{address}</span>
         </div>
       </div>
 

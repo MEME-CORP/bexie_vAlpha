@@ -2,6 +2,8 @@
   max-width: 800px;
   margin: 0 auto;
   padding: 2rem;
+  background-color: var(--bg-color);
+  color: var(--text-color);
 }
 
 .token-deployer h1 {
@@ -46,6 +48,8 @@
   border: 1px solid #ddd;
   border-radius: 5px;
   font-size: 1rem;
+  background-color: var(--card-bg);
+  color: var(--text-color);
 }
 
 .form-group textarea {
@@ -201,6 +205,9 @@
   padding: 1.5rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
 }
 
 .website-option-card:hover {
@@ -291,6 +298,9 @@
   margin-bottom: 1rem;
   border-radius: 8px;
   font-size: 0.9rem;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
 }
 
 .deployment-status {
@@ -301,4 +311,47 @@
   border-radius: 8px;
   text-align: center;
   font-weight: 500;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+/* Ensure form inputs are readable */
+.deploy-form input::placeholder,
+.deploy-form textarea::placeholder {
+  color: var(--text-color);
+  opacity: 0.6;
+}
+
+/* Add dark mode support to existing styles */
+.token-deployer {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+
+.deploy-form input,
+.deploy-form textarea {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.website-option-card {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.error-message,
+.deployment-status {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+/* Ensure form inputs are readable */
+.deploy-form input::placeholder,
+.deploy-form textarea::placeholder {
+  color: var(--text-color);
+  opacity: 0.6;
 } 

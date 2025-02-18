@@ -121,42 +121,11 @@ function TokenDetail() {
     }
   };
 
-  // Update useEffect to fetch market info after token data
+  // Update the useEffect for TradingView widget
   useEffect(() => {
-    const fetchToken = async () => {
-      try {
-        const { data: tokenData, error: tokenError } = await supabase
-          .from('tokens')
-          .select(`
-            *,
-            users (
-              wallet_address
-            )
-          `)
-          .eq('id', id)
-          .single();
-
-        if (tokenError) throw tokenError;
-        setToken(tokenData);
-        
-        // Fetch market info if bonding curve address exists
-        if (tokenData.bonding_curve_contract_address) {
-          fetchMarketInfo(tokenData.bonding_curve_contract_address);
-        }
-      } catch (error) {
-        console.error('Error fetching token:', error);
-        setError('Failed to load token details');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchToken();
-  }, [id]);
-
-  useEffect(() => {
+    let widget;
     if (token && token.token_symbol) {
-      const widget = new window.TradingView.widget({
+      widget = new window.TradingView.widget({
         width: '100%',
         height: 500,
         symbol: `BINANCE:${token.token_symbol}USDT`,
@@ -170,14 +139,61 @@ function TokenDetail() {
         allow_symbol_change: true,
         container_id: 'tradingview_chart'
       });
-
-      return () => {
-        if (widget && widget.remove) {
-          widget.remove();
-        }
-      };
     }
+
+    return () => {
+      if (widget) {
+        // Proper cleanup for TradingView widget
+        const container = document.getElementById('tradingview_chart');
+        if (container) {
+          container.innerHTML = '';
+        }
+      }
+    };
   }, [token]);
+
+  // Add cleanup to market info fetch
+  useEffect(() => {
+    let mounted = true;
+    
+    const fetchToken = async () => {
+      try {
+        const { data: tokenData, error: tokenError } = await supabase
+          .from('tokens')
+          .select(`
+            *,
+            users (
+              wallet_address
+            )
+          `)
+          .eq('id', id)
+          .single();
+
+        if (!mounted) return;
+        
+        if (tokenError) throw tokenError;
+        setToken(tokenData);
+        
+        if (tokenData.bonding_curve_contract_address) {
+          fetchMarketInfo(tokenData.bonding_curve_contract_address);
+        }
+      } catch (error) {
+        if (!mounted) return;
+        console.error('Error fetching token:', error);
+        setError('Failed to load token details');
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchToken();
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
 
   // Update the purchase function to handle status better
   const handlePurchase = async (e) => {

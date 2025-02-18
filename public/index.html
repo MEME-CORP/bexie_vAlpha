@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
@@ -12,12 +12,85 @@
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Web3 DApp</title>
     <style>
-      :root {
-        --theme-color: #000000;
+      :root[data-theme="light"] {
+        --bg-color: #ffffff;
+        --text-color: #000000;
+        --card-bg: #ffffff;
+        --border-color: #eaeaea;
+      }
+      
+      :root[data-theme="dark"] {
+        --bg-color: #1a1a1a;
+        --text-color: #ffffff;
+        --card-bg: #2d2d2d;
+        --border-color: #404040;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+      }
+
+      #theme-toggle {
+        padding: 8px;
+        border-radius: 50%;
+        border: none;
+        background: var(--card-bg);
+        color: var(--text-color);
+        cursor: pointer;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        top: 1rem;
+        right: 320px;
+        z-index: 100;
+      }
+
+      @media (max-width: 768px) {
+        #theme-toggle {
+          right: 200px;
+        }
       }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+      // Theme toggle functionality
+      function initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        return savedTheme;
+      }
+
+      function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateToggleIcon(newTheme);
+      }
+
+      function updateToggleIcon(theme) {
+        const icon = document.getElementById('theme-toggle-icon');
+        if (icon) {
+          icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+      }
+
+      // Initialize theme on load
+      window.addEventListener('DOMContentLoaded', () => {
+        const currentTheme = initTheme();
+        const button = document.createElement('button');
+        button.id = 'theme-toggle';
+        button.onclick = toggleTheme;
+        button.innerHTML = '<i id="theme-toggle-icon" class="fas fa-moon"></i>';
+        document.body.appendChild(button);
+        updateToggleIcon(currentTheme);
+      });
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

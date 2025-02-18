@@ -27,8 +27,8 @@ const config = getDefaultConfig({
 
 function App() {
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <WagmiProvider config={config}>
         <RainbowKitProvider>
           <Router>
             <>
@@ -43,8 +43,8 @@ function App() {
             </>
           </Router>
         </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+      </WagmiProvider>
+    </QueryClientProvider>
   );
 }
 

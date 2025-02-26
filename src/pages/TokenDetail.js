@@ -21,7 +21,7 @@ const BONDING_CURVE_ABI = [
 ];
 
 function TokenDetail() {
-  const { id } = useParams();
+  const { contract_address } = useParams();
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -152,12 +152,14 @@ function TokenDetail() {
     };
   }, [token]);
 
-  // Add cleanup to market info fetch
+  // Update the useEffect for fetching token data
   useEffect(() => {
     let mounted = true;
     
     const fetchToken = async () => {
       try {
+        console.log('Fetching token with contract address:', contract_address);
+        
         const { data: tokenData, error: tokenError } = await supabase
           .from('tokens')
           .select(`
@@ -166,16 +168,30 @@ function TokenDetail() {
               wallet_address
             )
           `)
-          .eq('id', id)
+          .eq('contract_address', contract_address)
           .single();
 
         if (!mounted) return;
         
-        if (tokenError) throw tokenError;
+        if (tokenError) {
+          console.error('Supabase error:', tokenError);
+          throw tokenError;
+        }
+        
+        if (!tokenData) {
+          console.error('No token found with contract address:', contract_address);
+          throw new Error('Token not found');
+        }
+        
+        console.log('Token data retrieved:', tokenData);
+        console.log('Contract address for this token:', tokenData.contract_address);
         setToken(tokenData);
         
         if (tokenData.bonding_curve_contract_address) {
+          console.log('Fetching market info for bonding curve:', tokenData.bonding_curve_contract_address);
           fetchMarketInfo(tokenData.bonding_curve_contract_address);
+        } else {
+          console.warn('No bonding curve address available for token');
         }
       } catch (error) {
         if (!mounted) return;
@@ -193,7 +209,7 @@ function TokenDetail() {
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [contract_address]);
 
   // Update the purchase function to handle status better
   const handlePurchase = async (e) => {

@@ -66,7 +66,7 @@ function Dashboard() {
           <div className="tokens-grid">
             {tokens.map((token) => (
               <Link 
-                to={`/token/${token.id}`} 
+                to={`/token/${token.contract_address}`} 
                 key={token.id} 
                 className="token-card"
                 style={{ textDecoration: 'none', color: 'inherit' }}

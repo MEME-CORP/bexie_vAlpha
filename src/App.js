@@ -70,7 +70,7 @@ function App() {
               <Navbar />
               <Routes>
                 <Route path="/" element={<Dashboard />} />
-                <Route path="/token/:id" element={<TokenDetail />} />
+                <Route path="/token/:contract_address" element={<TokenDetail />} />
                 <Route path="/deploy" element={<TokenDeployer />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<Navigate to="/" />} />

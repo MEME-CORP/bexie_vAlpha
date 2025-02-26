@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { ethers } from 'ethers';
 import '@rainbow-me/rainbowkit/styles.css';
-import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { getDefaultConfig, RainbowKitProvider, lightTheme } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
 import { mainnet, polygon, optimism, arbitrum, base, berachainTestnetbArtio } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
@@ -22,14 +22,49 @@ const config = getDefaultConfig({
   appName: 'Bexie DApp',
   projectId: '701812e78b1505706d7aaf82cd8de060',
   chains: [berachainBartio, mainnet, polygon, optimism, arbitrum, base],
-  ssr: true,
+  ssr: false,
 });
 
+// Patch JSON.stringify to handle circular references
+// This solution is based on the approach from https://stackoverflow.com/questions/11616630/how-can-i-print-a-circular-structure-in-a-json-like-format
+function patchJSONStringify() {
+  const originalStringify = JSON.stringify;
+  
+  JSON.stringify = function(obj, replacer, space) {
+    const cache = new Set();
+    
+    const customReplacer = (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (cache.has(value)) {
+          return undefined; // Remove circular reference
+        }
+        cache.add(value);
+      }
+      
+      return replacer ? replacer(key, value) : value;
+    };
+    
+    const result = originalStringify(obj, customReplacer, space);
+    cache.clear(); // Clean up memory
+    return result;
+  };
+  
+  return () => {
+    JSON.stringify = originalStringify; // Cleanup function
+  };
+}
+
 function App() {
+  // Apply JSON.stringify patch when component mounts
+  useEffect(() => {
+    const cleanup = patchJSONStringify();
+    return cleanup; // Restore original when component unmounts
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <WagmiProvider config={config}>
-        <RainbowKitProvider>
+        <RainbowKitProvider theme={lightTheme()} coolMode>
           <Router>
             <>
               <Navbar />

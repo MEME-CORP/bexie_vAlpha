@@ -4,7 +4,8 @@ import { supabase } from '../config/supabaseClient';
 import './TokenDetail.css';
 import { ethers } from 'ethers';
 
-// Update the Bonding Curve ABI to include all necessary functions
+// Remove unused BONDING_CURVE_ABI or mark it as intentionally unused
+// eslint-disable-next-line no-unused-vars
 const BONDING_CURVE_ABI = [
   "function buyTokens(uint256 minTokens) payable",
   "function buyTokensFor(address beneficiary) payable",
@@ -28,10 +29,13 @@ function TokenDetail() {
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [purchaseStatus, setPurchaseStatus] = useState('');
   const [marketInfo, setMarketInfo] = useState(null);
+  // Add UI usage for isLoadingMarket
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [sellAmount, setSellAmount] = useState('');
   const [sellStatus, setSellStatus] = useState('');
   const [expectedReturn, setExpectedReturn] = useState(null);
+  // Remove unused provider state or use it in the component
+  // eslint-disable-next-line no-unused-vars
   const [provider, setProvider] = useState(null);
   const [networkError, setNetworkError] = useState(false);
 
@@ -281,9 +285,25 @@ function TokenDetail() {
       setPurchaseStatus('Initiating purchase...');
       setError(null);
 
-      // Create a fresh provider instance like in the test
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
+      // Use the provider from state if available, otherwise create a new one
+      let currentProvider;
+      let signer;
+      
+      if (provider) {
+        currentProvider = provider;
+        signer = provider.getSigner();
+      } else {
+        // Create a fresh provider instance like in the test
+        currentProvider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = currentProvider.getSigner();
+      }
+      
+      // Get current gas price and increase it slightly to avoid pending transactions
+      const gasPrice = await currentProvider.getGasPrice();
+      const adjustedGasPrice = gasPrice.mul(120).div(100); // 20% higher than current gas price
+      
+      console.log("Current gas price:", ethers.utils.formatUnits(gasPrice, "gwei"), "gwei");
+      console.log("Adjusted gas price:", ethers.utils.formatUnits(adjustedGasPrice, "gwei"), "gwei");
       
       // Use minimal ABI with exact function signature from contract
       const bondingCurve = new ethers.Contract(
@@ -296,18 +316,30 @@ function TokenDetail() {
 
       setPurchaseStatus('Sending transaction...');
       
-      // Use exact same parameters and gas limit as the test
+      // Use exact same parameters but with adjusted gas price
       console.log("Sending transaction with value:", ethers.utils.formatEther(buyAmount), "BERA");
       const tx = await bondingCurve.buyTokens(
         1, // minTokens parameter - must be exactly 1 as in test
         { 
           value: buyAmount,
-          gasLimit: 100000 // Match test exactly
+          gasLimit: 200000, // Increased gas limit
+          gasPrice: adjustedGasPrice // Use adjusted gas price
         }
       );
 
       setPurchaseStatus('Waiting for confirmation...');
-      const receipt = await tx.wait();
+      console.log("Transaction hash:", tx.hash);
+      
+      // Set a timeout for transaction confirmation
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
+      );
+      
+      // Wait for receipt with timeout
+      const receipt = await Promise.race([
+        tx.wait(),
+        timeoutPromise
+      ]);
 
       if (receipt.status === 1) {
         setPurchaseStatus('Purchase successful!');
@@ -330,6 +362,8 @@ function TokenDetail() {
         errorMessage = 'Insufficient funds for transaction';
       } else if (error.message.includes('gas')) {
         errorMessage = 'Gas estimation failed or not enough gas';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Transaction is taking too long to confirm. Check your wallet for pending transactions.';
       } else if (error.data) {
         // Contract revert with data
         errorMessage = `Contract error: ${error.data.message || error.message}`;
@@ -345,8 +379,15 @@ function TokenDetail() {
     if (!amount || !window.ethereum) return;
 
     try {
-      // Create a fresh provider like in the test
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      // Use the provider from state if available, otherwise create a new one
+      let currentProvider;
+      
+      if (provider) {
+        currentProvider = provider;
+      } else {
+        // Create a fresh provider like in the test
+        currentProvider = new ethers.providers.Web3Provider(window.ethereum);
+      }
       
       // Add throttling
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -355,12 +396,12 @@ function TokenDetail() {
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
         ["function getSellPrice(uint256) public view returns (uint256)"],
-        provider
+        currentProvider
       );
 
       const amountWei = ethers.utils.parseEther(amount);
       const expectedBera = await bondingCurve.getSellPrice(amountWei);
-      const contractBalance = await provider.getBalance(token.bonding_curve_contract_address);
+      const contractBalance = await currentProvider.getBalance(token.bonding_curve_contract_address);
       
       if (expectedBera.gt(contractBalance)) {
         setError('Insufficient contract balance for this sale');
@@ -388,9 +429,25 @@ function TokenDetail() {
       setSellStatus('Initiating sale...');
       setError(null);
 
-      // Create fresh provider instance
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
+      // Use the provider from state if available, otherwise create a new one
+      let currentProvider;
+      let signer;
+      
+      if (provider) {
+        currentProvider = provider;
+        signer = provider.getSigner();
+      } else {
+        // Create a fresh provider instance
+        currentProvider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = currentProvider.getSigner();
+      }
+      
+      // Get current gas price and increase it slightly to avoid pending transactions
+      const gasPrice = await currentProvider.getGasPrice();
+      const adjustedGasPrice = gasPrice.mul(120).div(100); // 20% higher than current gas price
+      
+      console.log("Current gas price:", ethers.utils.formatUnits(gasPrice, "gwei"), "gwei");
+      console.log("Adjusted gas price:", ethers.utils.formatUnits(adjustedGasPrice, "gwei"), "gwei");
       
       const sellAmountWei = ethers.utils.parseEther(sellAmount);
       
@@ -408,7 +465,10 @@ function TokenDetail() {
       const approveTx = await tokenContract.approve(
         token.bonding_curve_contract_address,
         sellAmountWei,
-        { gasLimit: 100000 } // Same as test
+        { 
+          gasLimit: 100000, // Same as test
+          gasPrice: adjustedGasPrice // Use adjusted gas price
+        }
       );
       
       console.log("Approval transaction sent:", approveTx.hash);
@@ -431,12 +491,26 @@ function TokenDetail() {
 
       const tx = await bondingCurve.sellTokens(
         sellAmountWei,
-        { gasLimit: 100000 } // Same as test
+        { 
+          gasLimit: 150000, // Increased gas limit
+          gasPrice: adjustedGasPrice // Use adjusted gas price
+        }
       );
       
       console.log("Sell transaction sent:", tx.hash);
       setSellStatus('Waiting for confirmation...');
-      const receipt = await tx.wait();
+      
+      // Set a timeout for transaction confirmation
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
+      );
+      
+      // Wait for receipt with timeout
+      const receipt = await Promise.race([
+        tx.wait(),
+        timeoutPromise
+      ]);
+      
       console.log("Sell confirmed, hash:", receipt.hash);
 
       if (receipt.status === 1) {
@@ -460,6 +534,8 @@ function TokenDetail() {
         errorMessage = 'Insufficient funds for gas';
       } else if (error.message.includes('gas')) {
         errorMessage = 'Gas estimation failed or not enough gas';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Transaction is taking too long to confirm. Check your wallet for pending transactions.';
       } else if (error.data) {
         // Contract revert with data
         errorMessage = `Contract error: ${error.data.message || error.message}`;
@@ -560,9 +636,11 @@ function TokenDetail() {
         </div>
 
         {/* Add market info section */}
-        {marketInfo && (
-          <div className="token-detail-section">
-            <h2>Market Information</h2>
+        <div className="token-detail-section">
+          <h2>Market Information</h2>
+          {isLoadingMarket ? (
+            <div className="loading-market">Loading market data...</div>
+          ) : marketInfo ? (
             <div className="market-info">
               <p>Current Price: ${Number(marketInfo.tokenPriceUSD).toFixed(6)} USD</p>
               <p>Tokens Sold: {parseInt(marketInfo.soldTokens).toLocaleString()}</p>
@@ -571,8 +649,10 @@ function TokenDetail() {
                 <p className="warning">Note: Token liquidity not yet deployed</p>
               )}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="market-info-error">Unable to load market information</div>
+          )}
+        </div>
 
         {/* Add network error message */}
         {networkError && (

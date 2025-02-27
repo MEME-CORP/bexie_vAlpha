@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import './TokenDetail.css';
@@ -32,9 +32,66 @@ function TokenDetail() {
   const [sellAmount, setSellAmount] = useState('');
   const [sellStatus, setSellStatus] = useState('');
   const [expectedReturn, setExpectedReturn] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [networkError, setNetworkError] = useState(false);
 
-  // Add function to fetch market info
-  const fetchMarketInfo = async (bondingCurveAddress) => {
+  // Create a function to safely get the provider
+  const getProvider = useCallback(async () => {
+    if (!window.ethereum) {
+      setNetworkError(true);
+      throw new Error('MetaMask not installed');
+    }
+
+    try {
+      // Request accounts to ensure connection
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      // Check if we can get the network (validates connection)
+      await web3Provider.getNetwork();
+      
+      setNetworkError(false);
+      return web3Provider;
+    } catch (error) {
+      console.error('Provider connection error:', error);
+      setNetworkError(true);
+      throw new Error('Failed to connect to blockchain');
+    }
+  }, []);
+
+  // Initialize provider on component mount
+  useEffect(() => {
+    const initProvider = async () => {
+      try {
+        if (window.ethereum) {
+          const web3Provider = await getProvider();
+          setProvider(web3Provider);
+        }
+      } catch (error) {
+        console.warn('Could not initialize provider:', error.message);
+      }
+    };
+
+    initProvider();
+
+    // Handle network changes
+    const handleChainChanged = () => {
+      window.location.reload();
+    };
+
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', handleChainChanged);
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      }
+    };
+  }, [getProvider]);
+
+  // Add function to fetch market info with better error handling
+  const fetchMarketInfo = useCallback(async (bondingCurveAddress) => {
     if (!bondingCurveAddress) {
       console.error('No bonding curve address provided');
       setError('Token contract information is incomplete');
@@ -43,7 +100,7 @@ function TokenDetail() {
     }
 
     try {
-      // Add MetaMask connection check
+      // Use fallback values if no provider
       if (!window.ethereum) {
         setMarketInfo({
           beraPriceUSD: "0",
@@ -58,7 +115,7 @@ function TokenDetail() {
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       
-      // Add request throttling
+      // Add request throttling like in previous version
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       const bondingCurve = new ethers.Contract(
@@ -72,7 +129,7 @@ function TokenDetail() {
         provider
       );
 
-      // Sequential calls with individual error handling
+      // Sequential calls with individual error handling and throttling
       const beraPrice = await bondingCurve.getBeraPrice()
         .catch(() => ethers.BigNumber.from(0));
       
@@ -86,7 +143,7 @@ function TokenDetail() {
       const remainingSupply = await bondingCurve.totalSupplyTokens()
         .catch(() => ethers.utils.parseEther("1000000000"));
 
-      // Handle liquidity check separately
+      // Handle liquidity check separately with throttling
       let isLiquidityDeployed = false;
       try {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -119,7 +176,7 @@ function TokenDetail() {
     } finally {
       setIsLoadingMarket(false);
     }
-  };
+  }, [setError, setMarketInfo, setIsLoadingMarket]);
 
   // Update the useEffect for TradingView widget
   useEffect(() => {
@@ -209,11 +266,12 @@ function TokenDetail() {
     return () => {
       mounted = false;
     };
-  }, [contract_address]);
+  }, [contract_address, fetchMarketInfo]);
 
-  // Update the purchase function to handle status better
+  // Update the purchase function to exactly match the test pattern
   const handlePurchase = async (e) => {
     e.preventDefault();
+    
     if (!window.ethereum) {
       setError('Please install MetaMask to purchase tokens');
       return;
@@ -223,13 +281,14 @@ function TokenDetail() {
       setPurchaseStatus('Initiating purchase...');
       setError(null);
 
+      // Create a fresh provider instance like in the test
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Simple bonding curve interface - match test pattern
+      // Use minimal ABI with exact function signature from contract
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        ["function buyTokens(uint256) payable"],
+        ["function buyTokens(uint256) external payable"],
         signer
       );
 
@@ -237,12 +296,13 @@ function TokenDetail() {
 
       setPurchaseStatus('Sending transaction...');
       
-      // Match test's simple purchase pattern
+      // Use exact same parameters and gas limit as the test
+      console.log("Sending transaction with value:", ethers.utils.formatEther(buyAmount), "BERA");
       const tx = await bondingCurve.buyTokens(
-        1, // minTokens parameter
+        1, // minTokens parameter - must be exactly 1 as in test
         { 
           value: buyAmount,
-          gasLimit: 100000 // Same as test
+          gasLimit: 100000 // Match test exactly
         }
       );
 
@@ -252,7 +312,8 @@ function TokenDetail() {
       if (receipt.status === 1) {
         setPurchaseStatus('Purchase successful!');
         setPurchaseAmount('');
-        // Refresh market info after successful purchase
+        // Add throttling before refreshing market info
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await fetchMarketInfo(token.bonding_curve_contract_address);
       } else {
         throw new Error('Transaction failed');
@@ -260,22 +321,40 @@ function TokenDetail() {
 
     } catch (error) {
       console.error('Purchase error:', error);
-      setError(error.message.includes('user rejected') ? 
-        'Transaction was rejected by user' : 
-        'Failed to complete purchase');
+      // Provide more detailed error information
+      let errorMessage = 'Failed to complete purchase';
+      
+      if (error.message.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.code === 'INSUFFICIENT_FUNDS') {
+        errorMessage = 'Insufficient funds for transaction';
+      } else if (error.message.includes('gas')) {
+        errorMessage = 'Gas estimation failed or not enough gas';
+      } else if (error.data) {
+        // Contract revert with data
+        errorMessage = `Contract error: ${error.data.message || error.message}`;
+      }
+      
+      setError(errorMessage);
       setPurchaseStatus('');
     }
   };
 
-  // Add function to check sell price
+  // Update the check sell price function to match test pattern
   const checkSellPrice = async (amount) => {
     if (!amount || !window.ethereum) return;
 
     try {
+      // Create a fresh provider like in the test
       const provider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      // Add throttling
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Use exact contract function signature from contract
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        ["function getSellPrice(uint256) view returns (uint256)"],
+        ["function getSellPrice(uint256) public view returns (uint256)"],
         provider
       );
 
@@ -296,9 +375,10 @@ function TokenDetail() {
     }
   };
 
-  // Add sell function after handlePurchase
+  // Update sell function to match test pattern exactly
   const handleSell = async (e) => {
     e.preventDefault();
+    
     if (!window.ethereum) {
       setError('Please install MetaMask to sell tokens');
       return;
@@ -308,41 +388,62 @@ function TokenDetail() {
       setSellStatus('Initiating sale...');
       setError(null);
 
+      // Create fresh provider instance
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       
-      // Create token contract interface for approval
+      const sellAmountWei = ethers.utils.parseEther(sellAmount);
+      
+      // Step 1: Approve tokens exactly as in test
+      setSellStatus('Approving tokens...');
+      console.log("Approving tokens:", ethers.utils.formatEther(sellAmountWei));
+      
+      // Use exact token contract interface
       const tokenContract = new ethers.Contract(
         token.contract_address,
         ["function approve(address spender, uint256 amount) external returns (bool)"],
         signer
       );
 
-      const sellAmountWei = ethers.utils.parseEther(sellAmount);
-
-      setSellStatus('Approving tokens...');
       const approveTx = await tokenContract.approve(
         token.bonding_curve_contract_address,
-        sellAmountWei
+        sellAmountWei,
+        { gasLimit: 100000 } // Same as test
       );
-      await approveTx.wait();
+      
+      console.log("Approval transaction sent:", approveTx.hash);
+      const approveReceipt = await approveTx.wait();
+      console.log("Approval confirmed, hash:", approveReceipt.hash);
 
+      // Add throttling between transactions
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Step 2: Sell tokens exactly as in test
       setSellStatus('Sending sale transaction...');
+      console.log("Selling tokens:", ethers.utils.formatEther(sellAmountWei));
+      
+      // Use exact contract signature from contract
       const bondingCurve = new ethers.Contract(
         token.bonding_curve_contract_address,
-        ["function sellTokens(uint256 tokenAmount) returns (uint256)"],
+        ["function sellTokens(uint256) external returns (uint256)"],
         signer
       );
 
-      const tx = await bondingCurve.sellTokens(sellAmountWei);
-
+      const tx = await bondingCurve.sellTokens(
+        sellAmountWei,
+        { gasLimit: 100000 } // Same as test
+      );
+      
+      console.log("Sell transaction sent:", tx.hash);
       setSellStatus('Waiting for confirmation...');
       const receipt = await tx.wait();
+      console.log("Sell confirmed, hash:", receipt.hash);
 
       if (receipt.status === 1) {
         setSellStatus('Sale successful!');
         setSellAmount('');
-        // Refresh market info after successful sale
+        // Add throttling before refreshing
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await fetchMarketInfo(token.bonding_curve_contract_address);
       } else {
         throw new Error('Transaction failed');
@@ -350,9 +451,21 @@ function TokenDetail() {
 
     } catch (error) {
       console.error('Sale error:', error);
-      setError(error.message.includes('user rejected') ? 
-        'Transaction was rejected by user' : 
-        'Failed to complete sale');
+      // Provide more detailed error information
+      let errorMessage = 'Failed to complete sale';
+      
+      if (error.message.includes('user rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.code === 'INSUFFICIENT_FUNDS') {
+        errorMessage = 'Insufficient funds for gas';
+      } else if (error.message.includes('gas')) {
+        errorMessage = 'Gas estimation failed or not enough gas';
+      } else if (error.data) {
+        // Contract revert with data
+        errorMessage = `Contract error: ${error.data.message || error.message}`;
+      }
+      
+      setError(errorMessage);
       setSellStatus('');
     }
   };
@@ -461,7 +574,14 @@ function TokenDetail() {
           </div>
         )}
 
-        {/* Add purchase form */}
+        {/* Add network error message */}
+        {networkError && (
+          <div className="network-error-message">
+            Warning: Unable to connect to blockchain. Some features may be limited.
+          </div>
+        )}
+
+        {/* Update purchase form */}
         <div className="token-detail-section">
           <h2>Purchase Tokens</h2>
           <form onSubmit={handlePurchase} className="purchase-form">
@@ -477,11 +597,12 @@ function TokenDetail() {
                 required
                 placeholder="Enter BERA amount"
                 className="purchase-input"
+                disabled={networkError}
               />
             </div>
             <button 
               type="submit" 
-              disabled={!purchaseAmount || !token?.bonding_curve_contract_address}
+              disabled={!purchaseAmount || !token?.bonding_curve_contract_address || networkError}
             >
               {purchaseStatus || 'Buy Tokens'}
             </button>
@@ -490,7 +611,7 @@ function TokenDetail() {
           {error && <div className="error-message">{error}</div>}
         </div>
 
-        {/* Add sell form after purchase form */}
+        {/* Update sell form */}
         <div className="token-detail-section">
           <h2>Sell Tokens</h2>
           <form onSubmit={handleSell} className="purchase-form">
@@ -509,6 +630,7 @@ function TokenDetail() {
                 required
                 placeholder="Enter token amount"
                 className="purchase-input"
+                disabled={networkError}
               />
             </div>
             {expectedReturn && (
@@ -518,7 +640,7 @@ function TokenDetail() {
             )}
             <button 
               type="submit" 
-              disabled={!sellAmount || !token?.bonding_curve_contract_address || !expectedReturn}
+              disabled={!sellAmount || !token?.bonding_curve_contract_address || !expectedReturn || networkError}
             >
               {sellStatus || 'Sell Tokens'}
             </button>

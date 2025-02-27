@@ -3,6 +3,22 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import './TokenDetail.css';
 import { ethers } from 'ethers';
+import { 
+  useAccount, 
+  useChainId, 
+  useSwitchChain, 
+  useWalletClient,
+  usePublicClient,
+  useSendTransaction, 
+  useWriteContract,
+  // eslint-disable-next-line no-unused-vars
+  useSimulateContract,
+  // eslint-disable-next-line no-unused-vars
+  useWaitForTransactionReceipt
+} from 'wagmi';
+import { berachainBartio } from '../config/chains';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
+import { parseEther, formatEther } from 'viem';
 
 // Remove unused BONDING_CURVE_ABI or mark it as intentionally unused
 // eslint-disable-next-line no-unused-vars
@@ -21,6 +37,35 @@ const BONDING_CURVE_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)"
 ];
 
+// Define Berachain network constants for direct ethers.js usage
+// eslint-disable-next-line no-unused-vars
+const BERACHAIN_TESTNET = {
+  chainId: '0x13894', // 80084 in hex
+  chainName: 'Berachain bArtio Testnet',
+  nativeCurrency: {
+    name: 'BERA',
+    symbol: 'BERA',
+    decimals: 18
+  },
+  rpcUrls: ['https://bartio.rpc.berachain.com/'],
+  blockExplorerUrls: ['https://bartio.beratrail.io/']
+};
+
+// Minimal ABIs for contract interactions
+const TOKEN_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)"
+];
+
+const BONDING_CURVE_MINIMAL_ABI = [
+  "function buyTokens(uint256 minTokens) external payable",
+  "function sellTokens(uint256 tokenAmount) external returns (uint256)",
+  "function getSellPrice(uint256 tokenAmount) view returns (uint256)",
+  "function getBeraPrice() view returns (uint256)",
+  "function getCurrentPrice() view returns (uint256)",
+  "function totalSupplyTokens() view returns (uint256)",
+  "function liquidityDeployed() view returns (bool)"
+];
+
 function TokenDetail() {
   const { contract_address } = useParams();
   const [token, setToken] = useState(null);
@@ -29,72 +74,407 @@ function TokenDetail() {
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [purchaseStatus, setPurchaseStatus] = useState('');
   const [marketInfo, setMarketInfo] = useState(null);
-  // Add UI usage for isLoadingMarket
   const [isLoadingMarket, setIsLoadingMarket] = useState(true);
   const [sellAmount, setSellAmount] = useState('');
   const [sellStatus, setSellStatus] = useState('');
   const [expectedReturn, setExpectedReturn] = useState(null);
-  // Remove unused provider state or use it in the component
+  // Remove unused provider state or use it
   // eslint-disable-next-line no-unused-vars
   const [provider, setProvider] = useState(null);
+  // Remove unused networkError state or use it
+  // eslint-disable-next-line no-unused-vars
   const [networkError, setNetworkError] = useState(false);
-
-  // Create a function to safely get the provider
-  const getProvider = useCallback(async () => {
-    if (!window.ethereum) {
-      setNetworkError(true);
-      throw new Error('MetaMask not installed');
+  const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
+  
+  // Wagmi hooks for wallet interactions
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
+  // eslint-disable-next-line no-unused-vars
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
+  const { sendTransactionAsync } = useSendTransaction();
+  const { writeContractAsync } = useWriteContract();
+  
+  // Function to check if the connected network is Berachain testnet using wagmi
+  const checkNetwork = useCallback(() => {
+    if (!isConnected) {
+      setIsCorrectNetwork(false);
+      return false;
     }
 
+    const isOnBerachain = chainId === berachainBartio.id;
+    console.log("Current network chainId:", chainId);
+    setIsCorrectNetwork(isOnBerachain);
+    return isOnBerachain;
+  }, [isConnected, chainId]);
+
+  // Function to switch network to Berachain using wagmi
+  const switchToBerachain = useCallback(() => {
+    if (!isConnected) {
+      openConnectModal();
+      return;
+    }
+
+    if (switchChain) {
+      switchChain({ chainId: berachainBartio.id });
+    } else {
+      console.error("Network switching not supported by this wallet");
+      setError("Network switching not supported by this wallet. Please switch networks manually.");
+    }
+  }, [isConnected, openConnectModal, switchChain]);
+
+  // Create a function to get a direct ethers provider as fallback
+  // eslint-disable-next-line no-unused-vars
+  const getDirectProvider = useCallback(async () => {
     try {
-      // Request accounts to ensure connection
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+      // Create provider with explicit network configuration
+      const ethersProvider = new ethers.providers.JsonRpcProvider(
+        'https://bartio.rpc.berachain.com/',
+        {
+          chainId: berachainBartio.id,
+          name: berachainBartio.name,
+        }
+      );
       
-      // Check if we can get the network (validates connection)
-      await web3Provider.getNetwork();
+      // Verify the provider is connected to the correct network
+      const network = await ethersProvider.getNetwork();
+      console.log("Provider connected to network:", network);
       
-      setNetworkError(false);
-      return web3Provider;
+      if (network.chainId !== berachainBartio.id) {
+        console.warn(`Provider connected to wrong network: ${network.chainId}, expected: ${berachainBartio.id}`);
+        throw new Error('Provider connected to wrong network');
+      }
+      
+      // Return the direct JsonRpcProvider for more reliable connections
+      return ethersProvider;
     } catch (error) {
       console.error('Provider connection error:', error);
-      setNetworkError(true);
-      throw new Error('Failed to connect to blockchain');
+      throw error;
     }
   }, []);
 
-  // Initialize provider on component mount
+  // Update effect to use wagmi for network checking
   useEffect(() => {
-    const initProvider = async () => {
-      try {
-        if (window.ethereum) {
-          const web3Provider = await getProvider();
-          setProvider(web3Provider);
-        }
-      } catch (error) {
-        console.warn('Could not initialize provider:', error.message);
-      }
-    };
+    checkNetwork();
+  }, [checkNetwork, chainId]);
 
-    initProvider();
-
-    // Handle network changes
-    const handleChainChanged = () => {
-      window.location.reload();
-    };
-
-    if (window.ethereum) {
-      window.ethereum.on('chainChanged', handleChainChanged);
+  // Update handlePurchase to use Wagmi hooks for transactions with higher gas price
+  const handlePurchase = async (e) => {
+    e.preventDefault();
+    
+    if (!isConnected) {
+      openConnectModal();
+      return;
+    }
+    
+    if (!token?.bonding_curve_contract_address) {
+      setError('Bonding curve address not found');
+      return;
     }
 
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
+    try {
+      setPurchaseStatus('Initiating purchase...');
+      setError(null);
+      
+      // Ensure we're on the correct network first
+      if (!isCorrectNetwork) {
+        setPurchaseStatus('Switching to Berachain network...');
+        await switchToBerachain();
+        
+        // Wait a moment for the network switch to complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check if we're on the correct network now
+        if (!checkNetwork()) {
+          throw new Error('Failed to switch to Berachain network. Please switch manually and try again.');
+        }
       }
-    };
-  }, [getProvider]);
+      
+      const buyAmount = parseEther(purchaseAmount);
+      
+      setPurchaseStatus('Preparing transaction...');
+      console.log("Sending transaction with value:", formatEther(buyAmount), "BERA");
+      
+      // Get current gas price from the network
+      const currentGasPrice = await publicClient.getGasPrice();
+      console.log("Current network gas price:", currentGasPrice);
+      
+      // CRITICAL FIX: Dramatically increase gas price for Berachain testnet
+      // Based on successful cancellation evidence, we need to use Bwei range
+      // Multiply gas price by 1000000x (million) to ensure it gets processed
+      const boostedGasPrice = currentGasPrice * 1000000n;
+      console.log("Using dramatically boosted gas price:", boostedGasPrice);
+      
+      // Use Wagmi's sendTransaction hook to send the transaction - this properly integrates with RainbowKit
+      const hash = await sendTransactionAsync({
+        to: token.bonding_curve_contract_address,
+        value: buyAmount,
+        data: '0xef8e5118000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000', // buyTokens(1) function call
+        chainId: berachainBartio.id,
+        gas: 500000n, // Using BigInt literal with 'n' suffix
+        gasPrice: boostedGasPrice // Use much higher gas price for Berachain testnet
+      });
+      
+      console.log("Transaction hash:", hash);
+      setPurchaseStatus(`Transaction submitted with hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`);
+      
+      // Set up a timeout for transaction confirmation
+      let confirmationTimeout;
+      const timeoutPromise = new Promise((_, reject) => {
+        confirmationTimeout = setTimeout(() => {
+          reject(new Error(`Transaction confirmation timeout - it may still complete later. Hash: ${hash}`));
+        }, 60000); // 60 second timeout
+      });
+      
+      try {
+        // Wait for transaction receipt with timeout
+        const receipt = await Promise.race([
+          publicClient.waitForTransactionReceipt({
+            hash,
+            confirmations: 1, // Reduce confirmations to 1 for faster feedback
+            timeout: 60000
+          }),
+          timeoutPromise
+        ]);
+        
+        clearTimeout(confirmationTimeout);
+        
+        if (receipt.status === 'success') {
+          setPurchaseStatus('Purchase successful!');
+          setPurchaseAmount('');
+          // Add throttling before refreshing market info
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await fetchMarketInfo(token.bonding_curve_contract_address);
+        } else {
+          throw new Error('Transaction failed');
+        }
+      } catch (confirmError) {
+        clearTimeout(confirmationTimeout);
+        
+        if (confirmError.message.includes('timeout')) {
+          // If it's just a timeout, the transaction might still complete later
+          setPurchaseStatus(`Transaction pending. Check explorer for status with hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`);
+          setError(`Transaction is still pending after 60 seconds. It may still complete later. You may need to reset your wallet if you want to submit a new transaction.`);
+        } else {
+          throw confirmError;
+        }
+        }
+      } catch (error) {
+      console.error('Purchase error:', error);
+      // Provide more detailed error information
+      let errorMessage = 'Failed to complete purchase';
+      
+      if (error.message.includes('user rejected') || error.message.includes('rejected by user')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient BERA for transaction';
+      } else if (error.message.includes('gas')) {
+        errorMessage = 'Gas estimation failed or not enough gas';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Transaction is taking too long to confirm. It may still complete later.';
+      } else if (error.message.includes('nonce')) {
+        errorMessage = 'Transaction nonce error. You may have pending transactions. Try resetting your wallet.';
+      } else {
+        // Use the error message directly if it's already descriptive
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      setPurchaseStatus('');
+    }
+  };
 
-  // Add function to fetch market info with better error handling
+  // Update handleSell to use Wagmi hooks for transactions with higher gas price
+  const handleSell = async (e) => {
+    e.preventDefault();
+    
+    if (!isConnected) {
+      openConnectModal();
+      return;
+    }
+    
+    if (!token?.contract_address || !token?.bonding_curve_contract_address) {
+      setError('Token or bonding curve address not found');
+      return;
+    }
+
+    try {
+      setSellStatus('Initiating sale...');
+      setError(null);
+      
+      // Ensure we're on the correct network first
+      if (!isCorrectNetwork) {
+        setSellStatus('Switching to Berachain network...');
+        await switchToBerachain();
+        
+        // Wait a moment for the network switch to complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check if we're on the correct network now
+        if (!checkNetwork()) {
+          throw new Error('Failed to switch to Berachain network. Please switch manually and try again.');
+        }
+      }
+      
+      const sellAmountWei = parseEther(sellAmount);
+      
+      // Get current gas price from the network
+      const currentGasPrice = await publicClient.getGasPrice();
+      console.log("Current network gas price:", currentGasPrice);
+      
+      // CRITICAL FIX: Dramatically increase gas price for Berachain testnet
+      // Based on successful cancellation evidence, we need to use Bwei range
+      // Multiply gas price by 1000000x (million) to ensure it gets processed
+      const boostedGasPrice = currentGasPrice * 1000000n;
+      console.log("Using dramatically boosted gas price:", boostedGasPrice);
+      
+      // Step 1: Approve tokens using Wagmi's writeContract
+      setSellStatus('Approving tokens...');
+      console.log("Approving tokens:", formatEther(sellAmountWei));
+      
+      const approvalHash = await writeContractAsync({
+        address: token.contract_address,
+        abi: TOKEN_ABI,
+        functionName: 'approve',
+        args: [token.bonding_curve_contract_address, sellAmountWei],
+        chainId: berachainBartio.id,
+        gas: 200000n, 
+        gasPrice: boostedGasPrice // Use much higher gas price for Berachain testnet
+      });
+      
+      console.log("Approval transaction hash:", approvalHash);
+      setSellStatus(`Approval submitted with hash: ${approvalHash.slice(0, 10)}...${approvalHash.slice(-8)}`);
+      
+      // Set up a timeout for approval confirmation
+      let approvalTimeout;
+      const approvalTimeoutPromise = new Promise((_, reject) => {
+        approvalTimeout = setTimeout(() => {
+          reject(new Error(`Approval confirmation timeout - it may still complete later. Hash: ${approvalHash}`));
+        }, 60000); // 60 second timeout
+      });
+      
+      try {
+        // Wait for approval receipt with timeout
+        const approvalReceipt = await Promise.race([
+          publicClient.waitForTransactionReceipt({
+            hash: approvalHash,
+            confirmations: 1,
+            timeout: 60000
+          }),
+          approvalTimeoutPromise
+        ]);
+        
+        clearTimeout(approvalTimeout);
+        
+        if (approvalReceipt.status !== 'success') {
+          throw new Error('Token approval failed');
+        }
+        
+        // Success message for approval
+        setSellStatus('Approval confirmed! Preparing to sell tokens...');
+      } catch (approvalError) {
+        clearTimeout(approvalTimeout);
+        
+        if (approvalError.message.includes('timeout')) {
+          // If it's just a timeout, we'll continue but warn the user
+          setSellStatus(`Approval pending. Will try to proceed but transaction may fail. Hash: ${approvalHash.slice(0, 10)}...${approvalHash.slice(-8)}`);
+          console.warn('Approval confirmation timed out but proceeding:', approvalHash);
+        } else {
+          throw approvalError;
+        }
+      }
+      
+      // Add throttling between transactions - longer for Berachain
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Step 2: Sell tokens using Wagmi's writeContract
+      setSellStatus('Sending sale transaction...');
+      console.log("Selling tokens:", formatEther(sellAmountWei));
+      
+      const sellHash = await writeContractAsync({
+        address: token.bonding_curve_contract_address,
+        abi: BONDING_CURVE_MINIMAL_ABI,
+        functionName: 'sellTokens',
+        args: [sellAmountWei],
+        chainId: berachainBartio.id,
+        gas: 500000n,
+        gasPrice: boostedGasPrice // Use much higher gas price for Berachain testnet
+      });
+      
+      console.log("Sell transaction hash:", sellHash);
+      setSellStatus(`Sell transaction submitted with hash: ${sellHash.slice(0, 10)}...${sellHash.slice(-8)}`);
+      
+      // Set up a timeout for sell confirmation
+      let sellTimeout;
+      const sellTimeoutPromise = new Promise((_, reject) => {
+        sellTimeout = setTimeout(() => {
+          reject(new Error(`Sell confirmation timeout - it may still complete later. Hash: ${sellHash}`));
+        }, 60000); // 60 second timeout
+      });
+      
+      try {
+        // Wait for sell receipt with timeout
+        const sellReceipt = await Promise.race([
+          publicClient.waitForTransactionReceipt({
+            hash: sellHash,
+            confirmations: 1,
+            timeout: 60000
+          }),
+          sellTimeoutPromise
+        ]);
+        
+        clearTimeout(sellTimeout);
+        
+        if (sellReceipt.status === 'success') {
+          setSellStatus('Sale successful!');
+          setSellAmount('');
+          // Add throttling before refreshing
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await fetchMarketInfo(token.bonding_curve_contract_address);
+        } else {
+          throw new Error('Sell transaction failed');
+        }
+      } catch (sellError) {
+        clearTimeout(sellTimeout);
+        
+        if (sellError.message.includes('timeout')) {
+          // If it's just a timeout, the transaction might still complete later
+          setSellStatus(`Transaction pending. Check explorer for status with hash: ${sellHash.slice(0, 10)}...${sellHash.slice(-8)}`);
+          setError(`Transaction is still pending after 60 seconds. It may still complete later. You may need to reset your wallet if you want to submit a new transaction.`);
+        } else {
+          throw sellError;
+        }
+      }
+    } catch (error) {
+      console.error('Sale error:', error);
+      // Provide more detailed error information
+      let errorMessage = 'Failed to complete sale';
+      
+      if (error.message.includes('user rejected') || error.message.includes('rejected by user')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient BERA for gas';
+      } else if (error.message.includes('gas')) {
+        errorMessage = 'Gas estimation failed or not enough gas';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Transaction is taking too long to confirm. It may still complete later.';
+      } else if (error.message.includes('nonce')) {
+        errorMessage = 'Transaction nonce error. You may have pending transactions. Try resetting your wallet.';
+      } else if (error.message.includes('approval') || error.message.includes('Approval')) {
+        errorMessage = 'Token approval failed. Please try again or check your token balance.';
+      } else {
+        // Use the error message directly if it's already descriptive
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      setSellStatus('');
+    }
+  };
+
+  // Keep fetchMarketInfo the same as it's working well
   const fetchMarketInfo = useCallback(async (bondingCurveAddress) => {
     if (!bondingCurveAddress) {
       console.error('No bonding curve address provided');
@@ -104,8 +484,8 @@ function TokenDetail() {
     }
 
     try {
-      // Use fallback values if no provider
-      if (!window.ethereum) {
+      // Use fallback values if no connection
+      if (!isConnected) {
         setMarketInfo({
           beraPriceUSD: "0",
           tokenPriceUSD: "0",
@@ -117,11 +497,21 @@ function TokenDetail() {
         return;
       }
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      // Create a direct JsonRpcProvider to Berachain - don't rely on wallet's network
+      const directProvider = new ethers.providers.JsonRpcProvider(
+        'https://bartio.rpc.berachain.com/',
+        {
+          chainId: berachainBartio.id,
+          name: berachainBartio.name,
+        }
+      );
       
-      // Add request throttling like in previous version
+      console.log("Created direct provider for market info");
+      
+      // Add request throttling to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 1000));
 
+      // Create contract with minimal ABI for read-only operations
       const bondingCurve = new ethers.Contract(
         bondingCurveAddress,
         [
@@ -130,35 +520,55 @@ function TokenDetail() {
           "function totalSupplyTokens() view returns (uint256)",
           "function liquidityDeployed() view returns (bool)"
         ],
-        provider
+        directProvider
       );
 
       // Sequential calls with individual error handling and throttling
-      const beraPrice = await bondingCurve.getBeraPrice()
-        .catch(() => ethers.BigNumber.from(0));
+      console.log("Fetching BERA price...");
+      let beraPrice;
+      try {
+        beraPrice = await bondingCurve.getBeraPrice();
+      } catch (err) {
+        console.error("Error fetching BERA price:", err);
+        beraPrice = ethers.BigNumber.from(0);
+      }
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Longer delay for Berachain
       
-      const tokenPrice = await bondingCurve.getCurrentPrice()
-        .catch(() => ethers.BigNumber.from(0));
+      console.log("Fetching token price...");
+      let tokenPrice;
+      try {
+        tokenPrice = await bondingCurve.getCurrentPrice();
+      } catch (err) {
+        console.error("Error fetching token price:", err);
+        tokenPrice = ethers.BigNumber.from(0);
+      }
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Longer delay for Berachain
       
-      const remainingSupply = await bondingCurve.totalSupplyTokens()
-        .catch(() => ethers.utils.parseEther("1000000000"));
+      console.log("Fetching remaining supply...");
+      let remainingSupply;
+      try {
+        remainingSupply = await bondingCurve.totalSupplyTokens();
+      } catch (err) {
+        console.error("Error fetching remaining supply:", err);
+        remainingSupply = ethers.utils.parseEther("1000000000");
+      }
 
       // Handle liquidity check separately with throttling
       let isLiquidityDeployed = false;
       try {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Longer delay for Berachain
+        console.log("Checking liquidity deployment...");
         isLiquidityDeployed = await bondingCurve.liquidityDeployed();
       } catch (e) {
-        console.warn('Could not check liquidity status - assuming false');
+        console.warn('Could not check liquidity status - assuming false:', e);
       }
 
       const totalSupply = ethers.utils.parseEther("1000000000");
       const soldTokens = totalSupply.sub(remainingSupply);
 
+      console.log("Market info fetched successfully");
       setMarketInfo({
         beraPriceUSD: ethers.utils.formatEther(beraPrice),
         tokenPriceUSD: ethers.utils.formatUnits(tokenPrice, 6),
@@ -180,7 +590,71 @@ function TokenDetail() {
     } finally {
       setIsLoadingMarket(false);
     }
-  }, [setError, setMarketInfo, setIsLoadingMarket]);
+  }, [isConnected, setError, setMarketInfo, setIsLoadingMarket]);
+
+  // Update checkSellPrice to use Wagmi's publicClient for read operations
+  const checkSellPrice = async (amount) => {
+    if (!amount || !isConnected || !token?.bonding_curve_contract_address) return;
+
+    try {
+      // Create a direct JsonRpcProvider to Berachain - don't rely on wallet's network
+      const directProvider = new ethers.providers.JsonRpcProvider(
+        'https://bartio.rpc.berachain.com/',
+        {
+          chainId: berachainBartio.id,
+          name: berachainBartio.name,
+        }
+      );
+      
+      // Add throttling for rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Use exact contract function signature
+      const bondingCurve = new ethers.Contract(
+        token.bonding_curve_contract_address,
+        ["function getSellPrice(uint256) public view returns (uint256)"],
+        directProvider
+      );
+
+      const amountWei = ethers.utils.parseEther(amount);
+      
+      console.log("Checking sell price for amount:", ethers.utils.formatEther(amountWei));
+      
+      // Add timeout for the call
+      const sellPricePromise = bondingCurve.getSellPrice(amountWei);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Sell price check timeout')), 15000)
+      );
+      
+      const expectedBera = await Promise.race([
+        sellPricePromise,
+        timeoutPromise
+      ]);
+      
+      const contractBalance = await directProvider.getBalance(token.bonding_curve_contract_address);
+      
+      console.log("Expected BERA return:", ethers.utils.formatEther(expectedBera));
+      console.log("Contract balance:", ethers.utils.formatEther(contractBalance));
+      
+      if (expectedBera.gt(contractBalance)) {
+        setError('Insufficient contract balance for this sale');
+        setExpectedReturn(null);
+      } else {
+        setError(null);
+        setExpectedReturn(ethers.utils.formatEther(expectedBera));
+      }
+    } catch (error) {
+      console.error('Error checking sell price:', error);
+      setExpectedReturn(null);
+      
+      // Provide more specific error message
+      if (error.message.includes('timeout')) {
+        setError('Sell price check timed out. The network may be congested.');
+      } else {
+        setError('Could not calculate expected return. Please try again.');
+      }
+    }
+  };
 
   // Update the useEffect for TradingView widget
   useEffect(() => {
@@ -272,290 +746,14 @@ function TokenDetail() {
     };
   }, [contract_address, fetchMarketInfo]);
 
-  // Update the purchase function to exactly match the test pattern
-  const handlePurchase = async (e) => {
-    e.preventDefault();
-    
-    if (!window.ethereum) {
-      setError('Please install MetaMask to purchase tokens');
-      return;
-    }
-
-    try {
-      setPurchaseStatus('Initiating purchase...');
-      setError(null);
-
-      // Use the provider from state if available, otherwise create a new one
-      let currentProvider;
-      let signer;
-      
-      if (provider) {
-        currentProvider = provider;
-        signer = provider.getSigner();
-      } else {
-        // Create a fresh provider instance like in the test
-        currentProvider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = currentProvider.getSigner();
-      }
-      
-      // Get current gas price and increase it slightly to avoid pending transactions
-      const gasPrice = await currentProvider.getGasPrice();
-      const adjustedGasPrice = gasPrice.mul(120).div(100); // 20% higher than current gas price
-      
-      console.log("Current gas price:", ethers.utils.formatUnits(gasPrice, "gwei"), "gwei");
-      console.log("Adjusted gas price:", ethers.utils.formatUnits(adjustedGasPrice, "gwei"), "gwei");
-      
-      // Use minimal ABI with exact function signature from contract
-      const bondingCurve = new ethers.Contract(
-        token.bonding_curve_contract_address,
-        ["function buyTokens(uint256) external payable"],
-        signer
-      );
-
-      const buyAmount = ethers.utils.parseEther(purchaseAmount);
-
-      setPurchaseStatus('Sending transaction...');
-      
-      // Use exact same parameters but with adjusted gas price
-      console.log("Sending transaction with value:", ethers.utils.formatEther(buyAmount), "BERA");
-      const tx = await bondingCurve.buyTokens(
-        1, // minTokens parameter - must be exactly 1 as in test
-        { 
-          value: buyAmount,
-          gasLimit: 200000, // Increased gas limit
-          gasPrice: adjustedGasPrice // Use adjusted gas price
-        }
-      );
-
-      setPurchaseStatus('Waiting for confirmation...');
-      console.log("Transaction hash:", tx.hash);
-      
-      // Set a timeout for transaction confirmation
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
-      );
-      
-      // Wait for receipt with timeout
-      const receipt = await Promise.race([
-        tx.wait(),
-        timeoutPromise
-      ]);
-
-      if (receipt.status === 1) {
-        setPurchaseStatus('Purchase successful!');
-        setPurchaseAmount('');
-        // Add throttling before refreshing market info
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await fetchMarketInfo(token.bonding_curve_contract_address);
-      } else {
-        throw new Error('Transaction failed');
-      }
-
-    } catch (error) {
-      console.error('Purchase error:', error);
-      // Provide more detailed error information
-      let errorMessage = 'Failed to complete purchase';
-      
-      if (error.message.includes('user rejected')) {
-        errorMessage = 'Transaction was rejected by user';
-      } else if (error.code === 'INSUFFICIENT_FUNDS') {
-        errorMessage = 'Insufficient funds for transaction';
-      } else if (error.message.includes('gas')) {
-        errorMessage = 'Gas estimation failed or not enough gas';
-      } else if (error.message.includes('timeout')) {
-        errorMessage = 'Transaction is taking too long to confirm. Check your wallet for pending transactions.';
-      } else if (error.data) {
-        // Contract revert with data
-        errorMessage = `Contract error: ${error.data.message || error.message}`;
-      }
-      
-      setError(errorMessage);
-      setPurchaseStatus('');
-    }
-  };
-
-  // Update the check sell price function to match test pattern
-  const checkSellPrice = async (amount) => {
-    if (!amount || !window.ethereum) return;
-
-    try {
-      // Use the provider from state if available, otherwise create a new one
-      let currentProvider;
-      
-      if (provider) {
-        currentProvider = provider;
-      } else {
-        // Create a fresh provider like in the test
-        currentProvider = new ethers.providers.Web3Provider(window.ethereum);
-      }
-      
-      // Add throttling
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Use exact contract function signature from contract
-      const bondingCurve = new ethers.Contract(
-        token.bonding_curve_contract_address,
-        ["function getSellPrice(uint256) public view returns (uint256)"],
-        currentProvider
-      );
-
-      const amountWei = ethers.utils.parseEther(amount);
-      const expectedBera = await bondingCurve.getSellPrice(amountWei);
-      const contractBalance = await currentProvider.getBalance(token.bonding_curve_contract_address);
-      
-      if (expectedBera.gt(contractBalance)) {
-        setError('Insufficient contract balance for this sale');
-        setExpectedReturn(null);
-      } else {
-        setError(null);
-        setExpectedReturn(ethers.utils.formatEther(expectedBera));
-      }
-    } catch (error) {
-      console.error('Error checking sell price:', error);
-      setExpectedReturn(null);
-    }
-  };
-
-  // Update sell function to match test pattern exactly
-  const handleSell = async (e) => {
-    e.preventDefault();
-    
-    if (!window.ethereum) {
-      setError('Please install MetaMask to sell tokens');
-      return;
-    }
-
-    try {
-      setSellStatus('Initiating sale...');
-      setError(null);
-
-      // Use the provider from state if available, otherwise create a new one
-      let currentProvider;
-      let signer;
-      
-      if (provider) {
-        currentProvider = provider;
-        signer = provider.getSigner();
-      } else {
-        // Create a fresh provider instance
-        currentProvider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = currentProvider.getSigner();
-      }
-      
-      // Get current gas price and increase it slightly to avoid pending transactions
-      const gasPrice = await currentProvider.getGasPrice();
-      const adjustedGasPrice = gasPrice.mul(120).div(100); // 20% higher than current gas price
-      
-      console.log("Current gas price:", ethers.utils.formatUnits(gasPrice, "gwei"), "gwei");
-      console.log("Adjusted gas price:", ethers.utils.formatUnits(adjustedGasPrice, "gwei"), "gwei");
-      
-      const sellAmountWei = ethers.utils.parseEther(sellAmount);
-      
-      // Step 1: Approve tokens exactly as in test
-      setSellStatus('Approving tokens...');
-      console.log("Approving tokens:", ethers.utils.formatEther(sellAmountWei));
-      
-      // Use exact token contract interface
-      const tokenContract = new ethers.Contract(
-        token.contract_address,
-        ["function approve(address spender, uint256 amount) external returns (bool)"],
-        signer
-      );
-
-      const approveTx = await tokenContract.approve(
-        token.bonding_curve_contract_address,
-        sellAmountWei,
-        { 
-          gasLimit: 100000, // Same as test
-          gasPrice: adjustedGasPrice // Use adjusted gas price
-        }
-      );
-      
-      console.log("Approval transaction sent:", approveTx.hash);
-      const approveReceipt = await approveTx.wait();
-      console.log("Approval confirmed, hash:", approveReceipt.hash);
-
-      // Add throttling between transactions
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Step 2: Sell tokens exactly as in test
-      setSellStatus('Sending sale transaction...');
-      console.log("Selling tokens:", ethers.utils.formatEther(sellAmountWei));
-      
-      // Use exact contract signature from contract
-      const bondingCurve = new ethers.Contract(
-        token.bonding_curve_contract_address,
-        ["function sellTokens(uint256) external returns (uint256)"],
-        signer
-      );
-
-      const tx = await bondingCurve.sellTokens(
-        sellAmountWei,
-        { 
-          gasLimit: 150000, // Increased gas limit
-          gasPrice: adjustedGasPrice // Use adjusted gas price
-        }
-      );
-      
-      console.log("Sell transaction sent:", tx.hash);
-      setSellStatus('Waiting for confirmation...');
-      
-      // Set a timeout for transaction confirmation
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
-      );
-      
-      // Wait for receipt with timeout
-      const receipt = await Promise.race([
-        tx.wait(),
-        timeoutPromise
-      ]);
-      
-      console.log("Sell confirmed, hash:", receipt.hash);
-
-      if (receipt.status === 1) {
-        setSellStatus('Sale successful!');
-        setSellAmount('');
-        // Add throttling before refreshing
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await fetchMarketInfo(token.bonding_curve_contract_address);
-      } else {
-        throw new Error('Transaction failed');
-      }
-
-    } catch (error) {
-      console.error('Sale error:', error);
-      // Provide more detailed error information
-      let errorMessage = 'Failed to complete sale';
-      
-      if (error.message.includes('user rejected')) {
-        errorMessage = 'Transaction was rejected by user';
-      } else if (error.code === 'INSUFFICIENT_FUNDS') {
-        errorMessage = 'Insufficient funds for gas';
-      } else if (error.message.includes('gas')) {
-        errorMessage = 'Gas estimation failed or not enough gas';
-      } else if (error.message.includes('timeout')) {
-        errorMessage = 'Transaction is taking too long to confirm. Check your wallet for pending transactions.';
-      } else if (error.data) {
-        // Contract revert with data
-        errorMessage = `Contract error: ${error.data.message || error.message}`;
-      }
-      
-      setError(errorMessage);
-      setSellStatus('');
-    }
-  };
-
-  if (isLoading) {
-    return <div className="token-detail-container">Loading...</div>;
-  }
-
-  if (error || !token) {
-    return <div className="token-detail-container">Error: {error || 'Token not found'}</div>;
-  }
-
+  // Update the return statement with wagmi-aware UI
   return (
     <div className="token-detail-container">
+      {isLoading ? (
+        <div className="loading-container">Loading...</div>
+      ) : error && !token ? (
+        <div className="error-container">Error: {error || 'Token not found'}</div>
+      ) : (
       <div className="token-detail-card">
         <div className="token-detail-header">
           <img 
@@ -635,12 +833,27 @@ function TokenDetail() {
           </div>
         </div>
 
-        {/* Add market info section */}
-        <div className="token-detail-section">
-          <h2>Market Information</h2>
-          {isLoadingMarket ? (
-            <div className="loading-market">Loading market data...</div>
-          ) : marketInfo ? (
+          {/* Market info section with wagmi connection awareness */}
+          <div className="token-detail-section">
+            <h2>Market Information</h2>
+            {!isConnected ? (
+              <div className="connection-prompt">
+                <p>Connect your wallet to view market information</p>
+                <button onClick={openConnectModal} className="connect-button">
+                  Connect Wallet
+                </button>
+              </div>
+            ) : !isCorrectNetwork ? (
+              <div className="network-warning-message">
+                <p>You are connected to {chainId ? `Chain ID: ${chainId}` : "an unknown network"}.</p>
+                <p>Please switch to Berachain bArtio Testnet to view market information.</p>
+                <button onClick={switchToBerachain} className="network-switch-button">
+                  Switch to Berachain
+                </button>
+              </div>
+            ) : isLoadingMarket ? (
+              <div className="loading-market">Loading market data...</div>
+            ) : marketInfo ? (
             <div className="market-info">
               <p>Current Price: ${Number(marketInfo.tokenPriceUSD).toFixed(6)} USD</p>
               <p>Tokens Sold: {parseInt(marketInfo.soldTokens).toLocaleString()}</p>
@@ -649,21 +862,51 @@ function TokenDetail() {
                 <p className="warning">Note: Token liquidity not yet deployed</p>
               )}
             </div>
-          ) : (
-            <div className="market-info-error">Unable to load market information</div>
-          )}
-        </div>
+            ) : (
+              <div className="market-info-error">Unable to load market information</div>
+            )}
+          </div>
 
-        {/* Add network error message */}
-        {networkError && (
-          <div className="network-error-message">
-            Warning: Unable to connect to blockchain. Some features may be limited.
+          {/* Wallet connection status */}
+          <div className="wallet-status">
+            {isConnected ? (
+              <div className="wallet-connected">
+                <p>Connected with: {address?.slice(0,6)}...{address?.slice(-4)}</p>
+                <p>Network: Chain ID {chainId || "Unknown"}</p>
+                {!isCorrectNetwork && (
+                  <button onClick={switchToBerachain} className="network-switch-button">
+                    Switch to Berachain
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="wallet-disconnected">
+                <p>Wallet not connected</p>
+                <button onClick={openConnectModal} className="connect-button">
+                  Connect Wallet
+                </button>
           </div>
         )}
+          </div>
 
-        {/* Update purchase form */}
+          {/* Purchase form with connection awareness */}
         <div className="token-detail-section">
           <h2>Purchase Tokens</h2>
+            {!isConnected ? (
+              <div className="connection-prompt">
+                <p>Connect your wallet to purchase tokens</p>
+                <button onClick={openConnectModal} className="connect-button">
+                  Connect Wallet
+                </button>
+              </div>
+            ) : !isCorrectNetwork ? (
+              <div className="network-warning">
+                <p>Please switch to Berachain bArtio Testnet to purchase tokens</p>
+                <button onClick={switchToBerachain} className="network-switch-button">
+                  Switch Network
+                </button>
+              </div>
+            ) : (
           <form onSubmit={handlePurchase} className="purchase-form">
             <div className="form-group">
               <label htmlFor="beraAmount">BERA Amount:</label>
@@ -677,23 +920,38 @@ function TokenDetail() {
                 required
                 placeholder="Enter BERA amount"
                 className="purchase-input"
-                disabled={networkError}
               />
             </div>
             <button 
               type="submit" 
-              disabled={!purchaseAmount || !token?.bonding_curve_contract_address || networkError}
+                  disabled={!purchaseAmount || !token?.bonding_curve_contract_address}
             >
               {purchaseStatus || 'Buy Tokens'}
             </button>
           </form>
+            )}
           {purchaseStatus && <div className="status-message">{purchaseStatus}</div>}
           {error && <div className="error-message">{error}</div>}
         </div>
 
-        {/* Update sell form */}
+          {/* Sell form with connection awareness */}
         <div className="token-detail-section">
           <h2>Sell Tokens</h2>
+            {!isConnected ? (
+              <div className="connection-prompt">
+                <p>Connect your wallet to sell tokens</p>
+                <button onClick={openConnectModal} className="connect-button">
+                  Connect Wallet
+                </button>
+              </div>
+            ) : !isCorrectNetwork ? (
+              <div className="network-warning">
+                <p>Please switch to Berachain bArtio Testnet to sell tokens</p>
+                <button onClick={switchToBerachain} className="network-switch-button">
+                  Switch Network
+                </button>
+              </div>
+            ) : (
           <form onSubmit={handleSell} className="purchase-form">
             <div className="form-group">
               <label htmlFor="tokenAmount">Token Amount:</label>
@@ -703,14 +961,15 @@ function TokenDetail() {
                 value={sellAmount}
                 onChange={(e) => {
                   setSellAmount(e.target.value);
+                      if (isCorrectNetwork) {
                   checkSellPrice(e.target.value);
+                      }
                 }}
                 min="0"
                 step="0.01"
                 required
                 placeholder="Enter token amount"
                 className="purchase-input"
-                disabled={networkError}
               />
             </div>
             {expectedReturn && (
@@ -720,15 +979,17 @@ function TokenDetail() {
             )}
             <button 
               type="submit" 
-              disabled={!sellAmount || !token?.bonding_curve_contract_address || !expectedReturn || networkError}
+                  disabled={!sellAmount || !token?.bonding_curve_contract_address || !expectedReturn}
             >
               {sellStatus || 'Sell Tokens'}
             </button>
           </form>
+            )}
           {sellStatus && <div className="status-message">{sellStatus}</div>}
           {error && <div className="error-message">{error}</div>}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -40,14 +40,14 @@ function TokenDeployer() {
   const [deploymentStatus, setDeploymentStatus] = useState('');
 
   // Update loading state logic
-  const [isWalletLoading, setIsWalletLoading] = useState(false);
+  // const isWalletLoading = ...
   
   useEffect(() => {
     // Check both RainbowKit connection status and account
     if (isConnected && typeof address !== 'undefined') {
-      setIsWalletLoading(false);
+      // setIsWalletLoading(false);
     } else if (!isConnected) {
-      setIsWalletLoading(false); // Not loading if explicitly disconnected
+      // setIsWalletLoading(false); // Not loading if explicitly disconnected
     }
   }, [address, isConnected]);
 
@@ -131,6 +131,7 @@ function TokenDeployer() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `public/${fileName}`;
 
+      // eslint-disable-next-line no-unused-vars
       const { error: uploadError, data } = await supabase.storage
         .from('logos')
         .upload(filePath, file, {
@@ -187,35 +188,7 @@ function TokenDeployer() {
   };
 
   // Add this new function to check token deployment
-  const verifyTokenDeployment = async (provider, tokenAddress, bondingCurveAddress) => {
-    try {
-      // Create contract instance
-      const tokenFactory = new ethers.Contract(
-        TOKEN_FACTORY_ADDRESS,
-        FACTORY_ABI,
-        provider
-      );
-
-      // Get token info
-      const [bondingCurve, isActive] = await tokenFactory.getTokenInfo(tokenAddress);
-      
-      if (!isActive || bondingCurve !== bondingCurveAddress) {
-        throw new Error("Token verification failed");
-      }
-
-      // Get bonding curve info to verify initial state
-      const [price, supply] = await tokenFactory.getBondingCurveInfo(bondingCurveAddress);
-      
-      return {
-        isValid: true,
-        price: ethers.utils.formatEther(price),
-        supply: supply.toString()
-      };
-    } catch (error) {
-      console.error("Token verification error:", error);
-      throw new Error("Failed to verify token deployment");
-    }
-  };
+  // const verifyTokenDeployment = ...
 
   // Update the deployTokenToBlockchain function
   const deployTokenToBlockchain = async (beraAmount) => {
@@ -289,13 +262,6 @@ function TokenDeployer() {
         bondingCurve: bondingCurveAddress
       });
 
-      // Upload logo if provided
-      let logoUrl = null;
-      if (formData.tokenLogo) {
-        setDeploymentStatus('Uploading logo...');
-        logoUrl = await uploadLogo(formData.tokenLogo);
-      }
-
       // Return the addresses and hash
       return {
         tokenAddress,
@@ -346,7 +312,7 @@ function TokenDeployer() {
       // Only create user after successful deployment
       const userId = await createOrGetUser();
 
-      // Upload logo and continue with the rest
+      // Upload logo
       const logoUrl = await uploadLogo(formData.tokenLogo);
 
       // Prepare token data

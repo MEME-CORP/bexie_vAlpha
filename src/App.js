@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+// import { useState } from 'react';
+import { useEffect } from 'react';
+// import ethers from 'ethers';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import { ethers } from 'ethers';
-import '@rainbow-me/rainbowkit/styles.css';
+// import '@rainbow-me/rainbowkit/styles.css';
 import { getDefaultConfig, RainbowKitProvider, lightTheme } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
-import { mainnet, polygon, optimism, arbitrum, base, berachainTestnetbArtio } from 'wagmi/chains';
+import { mainnet, polygon, optimism, arbitrum, base } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { berachainBartio } from './config/chains';
 

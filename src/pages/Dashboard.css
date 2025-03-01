@@ -434,3 +434,37 @@ body::before {
     font-size: 0.5rem;
   }
 } 
+
+/* RainbowKit Connect Button - ASCII Art Noir Theme */
+/* ONLY styling the specific connect button and nothing else */
+
+/* Connect Button - Using the most specific selector possible */
+button[data-testid="rk-connect-button"] {
+  background-color: var(--bg-color) !important;
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--text-color) !important;
+  font-family: 'Courier New', monospace !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  font-size: 0.9rem !important;
+  letter-spacing: 0.1em !important;
+  border-radius: 0 !important;
+  padding: 0.5rem 1rem !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Connect Button - Hover State */
+button[data-testid="rk-connect-button"]:hover {
+  background: var(--text-color) !important;
+  color: var(--bg-color) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Connect Button Inner Elements */
+button[data-testid="rk-connect-button"] * {
+  font-family: 'Courier New', monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+} 

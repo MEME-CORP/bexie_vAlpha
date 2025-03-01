@@ -44,7 +44,7 @@
   40% { content: "░░▓▒░                ░▒▓░░"; }
   60% { content: "░░░▓▒░              ░▒▓░░░"; }
   80% { content: "░░░░▓▒░            ░▒▓░░░░"; }
-  100% { content: "░░░░░▓▒░          ░▒▓░░░░░"; }
+  100% { content: "░░░░░▓▒░          ░▒▓░░░░"; }
 }
 
 body {
@@ -90,9 +90,6 @@ body::before {
   letter-spacing: 0.05em;
   min-height: calc(100vh - 4rem);
 }
-
-
-
 
 .header {
   display: flex;
@@ -219,7 +216,12 @@ body::before {
   border-radius: 0;
   object-fit: cover;
   border: 1px solid var(--border-color);
-  filter: grayscale(100%) contrast(1.5);
+  filter: none !important;
+  -webkit-filter: none !important;
+  filter: brightness(1) contrast(1) saturate(1) !important;
+  opacity: 1 !important;
+  z-index: 10;
+  position: relative;
 }
 
 .token-title {

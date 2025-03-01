@@ -1,41 +1,133 @@
+/* ASCII Art Noir Theme for Profile */
+:root {
+  --bg-color: #000000;
+  --text-color: #FFFFFF;
+  --border-color: #333333;
+  --card-bg: #111111;
+  --accent-color: #FFFFFF;
+  --error-color: #FFFFFF;
+  --success-color: #FFFFFF;
+}
+
+/* Scan line animation */
+@keyframes scanline {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 100vh;
+  }
+}
+
+/* Character flicker animation */
+@keyframes flicker {
+  0% { opacity: 1; }
+  49% { opacity: 1; }
+  50% { opacity: 0.8; }
+  51% { opacity: 1; }
+  59% { opacity: 1; }
+  60% { opacity: 0.8; }
+  61% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+/* Token card hover animation */
+@keyframes tokenHover {
+  0% { border-color: var(--border-color); }
+  100% { border-color: var(--text-color); }
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Courier New', monospace;
+  position: relative;
+}
+
+/* Scan line overlay */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 1000;
+  animation: scanline 10s linear infinite;
+}
+
 .profile-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  position: relative;
+  z-index: 1;
+  letter-spacing: 0.05em;
 }
+
+
 
 .profile-header {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .profile-header h1 {
-  color: #2c3e50;
+  color: var(--text-color);
   margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 2rem;
+  text-align: center;
+  animation: flicker 10s infinite;
+}
+
+.profile-header h1::before {
+  content: "// ";
+}
+
+.profile-header h1::after {
+  content: " //";
 }
 
 .wallet-info {
-  background: #f8f9fa;
+  background: var(--card-bg);
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
+  border: 1px solid var(--border-color);
 }
 
 .wallet-info .label {
-  color: #666;
+  color: var(--text-color);
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.9rem;
 }
 
 .wallet-info .address {
   font-family: monospace;
-  background: #fff;
+  background: var(--bg-color);
   padding: 0.5rem 1rem;
-  border-radius: 4px;
-  border: 1px solid #eee;
+  border-radius: 0;
+  border: 1px solid var(--border-color);
+  letter-spacing: 0.05em;
 }
 
 .tokens-section {
@@ -43,16 +135,31 @@
 }
 
 .tokens-section h2 {
-  color: #2c3e50;
+  color: var(--text-color);
   margin-bottom: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.tokens-section h2::before {
+  content: "[ ";
+}
+
+.tokens-section h2::after {
+  content: " ]";
 }
 
 .no-tokens {
   text-align: center;
   padding: 3rem;
-  background: #f8f9fa;
-  border-radius: 8px;
-  color: #666;
+  background: var(--card-bg);
+  border-radius: 0;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  font-family: monospace;
+  letter-spacing: 0.05em;
 }
 
 .tokens-grid {
@@ -62,10 +169,34 @@
 }
 
 .token-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--card-bg);
+  border-radius: 0;
   padding: 1.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.token-card:hover {
+  animation: tokenHover 0.5s forwards;
+}
+
+.token-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--text-color),
+    var(--text-color) 5px,
+    transparent 5px,
+    transparent 10px
+  );
 }
 
 .token-header {
@@ -73,30 +204,41 @@
   align-items: center;
   gap: 1rem;
   margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
 }
 
 .token-logo {
   width: 48px;
   height: 48px;
-  border-radius: 8px;
+  border-radius: 0;
   object-fit: cover;
+  border: 1px solid var(--border-color);
+  filter: grayscale(100%) contrast(1.5);
 }
 
 .token-title h3 {
   margin: 0;
-  color: #2c3e50;
+  color: var(--text-color);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 1.2rem;
 }
 
 .token-symbol {
-  color: #666;
+  color: var(--text-color);
   font-size: 0.9rem;
+  opacity: 0.7;
+  font-family: monospace;
 }
 
 .token-description {
-  color: #666;
+  color: var(--text-color);
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
   line-height: 1.5;
+  opacity: 0.8;
+  font-family: monospace;
 }
 
 .token-links {
@@ -111,19 +253,29 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 5px;
+  border-radius: 0;
   font-size: 0.9rem;
   text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border: 1px solid var(--text-color);
+  transition: all 0.2s ease;
 }
 
 .website-link {
-  background: #3498db;
-  color: white;
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+.website-link:hover {
+  background: var(--text-color);
+  color: var(--bg-color);
 }
 
 .bexie-badge {
-  background: #9b59b6;
-  color: white;
+  background: var(--bg-color);
+  color: var(--text-color);
+  border-style: dashed;
 }
 
 .social-links {
@@ -138,48 +290,72 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  color: white;
+  border-radius: 0;
+  color: var(--bg-color);
+  background-color: var(--text-color);
   text-decoration: none;
+  transition: all 0.2s ease;
 }
 
-.social-link.telegram {
-  background: #0088cc;
-}
-
-.social-link.twitter {
-  background: #000000;
+.social-link:hover {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--text-color);
 }
 
 .contract-info {
-  background: #f8f9fa;
+  background: var(--bg-color);
   padding: 0.75rem;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  margin-bottom: 1rem;
 }
 
 .contract-info .label {
-  color: #666;
+  color: var(--text-color);
   margin-right: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.8rem;
 }
 
 .contract-info .address {
   font-family: monospace;
+  letter-spacing: 0.05em;
 }
 
 .loading {
   text-align: center;
   padding: 3rem;
-  color: #666;
+  color: var(--text-color);
+  font-family: monospace;
+  animation: flicker 2s infinite;
+  letter-spacing: 0.1em;
+}
+
+.loading::before {
+  content: "[ ";
+}
+
+.loading::after {
+  content: " ]";
 }
 
 .error-message {
-  background-color: #fee2e2;
-  border: 1px solid #ef4444;
-  color: #b91c1c;
+  background-color: var(--bg-color);
+  border: 1px solid var(--text-color);
+  color: var(--text-color);
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: 0;
   margin-bottom: 1rem;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.error-message::before {
+  content: "ERROR: ";
+  font-weight: bold;
 }
 
 /* Responsive adjustments */
@@ -201,16 +377,37 @@
 .activate-agent-button {
   width: 100%;
   padding: 0.75rem;
-  background: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--text-color);
+  border-radius: 0;
   cursor: pointer;
   margin-top: 1rem;
   font-weight: bold;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Courier New', monospace;
 }
 
 .activate-agent-button:hover {
-  background: #218838;
+  background: var(--text-color);
+  color: var(--bg-color);
+}
+
+/* Terminal output effect for token cards */
+.token-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--text-color),
+    var(--text-color) 5px,
+    transparent 5px,
+    transparent 10px
+  );
 } 

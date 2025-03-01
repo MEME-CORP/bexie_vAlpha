@@ -11,6 +11,22 @@ const TOKEN_FACTORY_ADDRESS = "0x547290255f50f524e0dCe4eF00E18DC60911336A";
 const BERA_USD_PRICE_FEED = "0x11B714817cBC92D402383cFd3f1037B122dcf69A";
 const CREATION_FEE = ethers.utils.parseEther("0.002");
 
+// ASCII art for the header
+const ASCII_HEADER = `
++----------------------------------------------+
+|                                              |
+|  ██████╗ ███████╗██╗  ██╗██╗███████╗        |
+|  ██╔══██╗██╔════╝╚██╗██╔╝██║██╔════╝        |
+|  ██████╔╝█████╗   ╚███╔╝ ██║█████╗          |
+|  ██╔══██╗██╔══╝   ██╔██╗ ██║██╔══╝          |
+|  ██████╔╝███████╗██╔╝ ██╗██║███████╗        |
+|  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝        |
+|                                              |
+|  TOKEN DEPLOYER v1.0                         |
+|                                              |
++----------------------------------------------+
+`;
+
 // Update the factory ABI to match the actual contract events
 const FACTORY_ABI = [
   "function createToken(string name, string symbol, uint256 totalSupply, address priceFeed) payable returns (address)",
@@ -38,16 +54,23 @@ function TokenDeployer() {
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deploymentStatus, setDeploymentStatus] = useState('');
+  const [terminalOutput, setTerminalOutput] = useState([]);
 
-  // Update loading state logic
-  // const isWalletLoading = ...
+  // Add terminal output function
+  const addTerminalLine = (line) => {
+    setTerminalOutput(prev => [...prev, `> ${line}`]);
+    // Keep only the last 5 lines
+    if (terminalOutput.length > 5) {
+      setTerminalOutput(prev => prev.slice(prev.length - 5));
+    }
+  };
   
   useEffect(() => {
     // Check both RainbowKit connection status and account
     if (isConnected && typeof address !== 'undefined') {
-      // setIsWalletLoading(false);
+      addTerminalLine(`WALLET CONNECTED: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`);
     } else if (!isConnected) {
-      // setIsWalletLoading(false); // Not loading if explicitly disconnected
+      addTerminalLine("WALLET DISCONNECTED");
     }
   }, [address, isConnected]);
 
@@ -57,18 +80,25 @@ function TokenDeployer() {
       ...prev,
       [name]: value
     }));
+    
+    // Add terminal feedback for important fields
+    if (name === 'tokenName' || name === 'tokenSymbol') {
+      addTerminalLine(`${name.toUpperCase()} SET: ${value}`);
+    }
   };
 
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert('File size should be less than 5MB');
+        setError('File size should be less than 5MB');
+        addTerminalLine("ERROR: LOGO FILE TOO LARGE");
         return;
       }
       
       if (!file.type.startsWith('image/')) {
-        alert('Please upload an image file');
+        setError('Please upload an image file');
+        addTerminalLine("ERROR: INVALID FILE TYPE");
         return;
       }
 
@@ -81,6 +111,7 @@ function TokenDeployer() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setLogoPreview(reader.result);
+        addTerminalLine("LOGO UPLOADED SUCCESSFULLY");
       };
       reader.readAsDataURL(file);
     }
@@ -93,6 +124,8 @@ function TokenDeployer() {
       websiteOption: option,
       websiteUrl: option === 'create' ? '' : prev.websiteUrl
     }));
+    
+    addTerminalLine(`WEBSITE OPTION: ${option.toUpperCase()}`);
   };
 
   const validateForm = () => {
@@ -123,10 +156,14 @@ function TokenDeployer() {
     if (formData.websiteOption === 'existing' && !urlRegex.test(formData.websiteUrl)) {
       throw new Error('Invalid website URL format');
     }
+    
+    addTerminalLine("FORM VALIDATION: SUCCESS");
   };
 
   const uploadLogo = async (file) => {
     try {
+      addTerminalLine("UPLOADING LOGO...");
+      
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `public/${fileName}`;
@@ -146,9 +183,11 @@ function TokenDeployer() {
         .from('logos')
         .getPublicUrl(filePath);
 
+      addTerminalLine("LOGO UPLOAD: SUCCESS");
       return publicUrl;
     } catch (error) {
       console.error('Error uploading logo:', error);
+      addTerminalLine("LOGO UPLOAD: FAILED");
       throw new Error('Failed to upload logo image');
     }
   };
@@ -158,6 +197,8 @@ function TokenDeployer() {
       if (!address) {
         throw new Error('Wallet address not available');
       }
+
+      addTerminalLine("CHECKING USER DATABASE...");
 
       const { data: user, error: fetchError } = await supabase
         .from('users')
@@ -170,6 +211,8 @@ function TokenDeployer() {
       }
 
       if (!user) {
+        addTerminalLine("CREATING NEW USER...");
+        
         const { data: newUser, error: insertError } = await supabase
           .from('users')
           .insert([{ wallet_address: address }])
@@ -177,18 +220,19 @@ function TokenDeployer() {
           .single();
 
         if (insertError) throw insertError;
+        
+        addTerminalLine("USER CREATED: SUCCESS");
         return newUser.id;
       }
 
+      addTerminalLine("USER FOUND: SUCCESS");
       return user.id;
     } catch (error) {
       console.error('Error with user:', error);
+      addTerminalLine("USER DATABASE ERROR");
       throw new Error('Failed to process user information');
     }
   };
-
-  // Add this new function to check token deployment
-  // const verifyTokenDeployment = ...
 
   // Update the deployTokenToBlockchain function
   const deployTokenToBlockchain = async (beraAmount) => {
@@ -201,7 +245,8 @@ function TokenDeployer() {
         throw new Error("Please connect your wallet to deploy tokens");
       }
 
-      setDeploymentStatus('Initiating deployment...');
+      setDeploymentStatus('INITIATING DEPLOYMENT...');
+      addTerminalLine("CONNECTING TO BLOCKCHAIN...");
       
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
@@ -217,13 +262,16 @@ function TokenDeployer() {
         signer
       );
 
-      setDeploymentStatus('Creating token...');
+      setDeploymentStatus('CREATING TOKEN...');
+      addTerminalLine("PREPARING TOKEN CREATION...");
       
       console.log('Starting token deployment with:', {
         name: formData.tokenName.trim(),
         symbol: formData.tokenSymbol.trim().toUpperCase(),
         value: totalValue.toString()
       });
+
+      addTerminalLine(`DEPLOYING TOKEN: ${formData.tokenName.trim()} (${formData.tokenSymbol.trim().toUpperCase()})`);
 
       const tx = await tokenFactory.createToken(
         formData.tokenName.trim(),
@@ -236,7 +284,10 @@ function TokenDeployer() {
         }
       );
 
-      setDeploymentStatus('Waiting for confirmation...');
+      setDeploymentStatus('WAITING FOR CONFIRMATION...');
+      addTerminalLine(`TX HASH: ${tx.hash.substring(0, 10)}...${tx.hash.substring(tx.hash.length - 8)}`);
+      addTerminalLine("AWAITING BLOCKCHAIN CONFIRMATION...");
+      
       const receipt = await tx.wait();
 
       // Find TokenCreated event using indexed parameters
@@ -262,6 +313,9 @@ function TokenDeployer() {
         bondingCurve: bondingCurveAddress
       });
 
+      addTerminalLine("TOKEN DEPLOYMENT: SUCCESS");
+      addTerminalLine(`TOKEN ADDRESS: ${tokenAddress.substring(0, 8)}...`);
+
       // Return the addresses and hash
       return {
         tokenAddress,
@@ -271,6 +325,7 @@ function TokenDeployer() {
 
     } catch (error) {
       console.error('Error in deployment process:', error);
+      addTerminalLine("DEPLOYMENT ERROR: " + error.message);
       throw error;
     }
   };
@@ -289,8 +344,10 @@ function TokenDeployer() {
       
       // Open modal for transaction
       setIsModalOpen(true);
+      addTerminalLine("DEPLOYMENT INITIATED: AWAITING CONFIRMATION");
     } catch (error) {
       setError(error.message || 'Failed to validate form');
+      addTerminalLine("ERROR: " + error.message);
     }
   };
 
@@ -300,6 +357,8 @@ function TokenDeployer() {
     setError(null);
 
     try {
+      addTerminalLine("CONFIRMATION RECEIVED: PROCEEDING WITH DEPLOYMENT");
+      
       // Deploy token first
       const deploymentResult = await deployTokenToBlockchain(beraAmount);
       
@@ -315,6 +374,8 @@ function TokenDeployer() {
       // Upload logo
       const logoUrl = await uploadLogo(formData.tokenLogo);
 
+      addTerminalLine("SAVING TOKEN DATA TO DATABASE...");
+      
       // Prepare token data
       const tokenData = {
         user_id: userId,
@@ -338,12 +399,16 @@ function TokenDeployer() {
 
       if (tokenError) throw tokenError;
 
+      addTerminalLine("TOKEN SAVED: SUCCESS");
+      addTerminalLine("DEPLOYMENT COMPLETE");
+      
       alert('Token deployed and saved successfully!');
       navigate('/');
       
     } catch (error) {
       console.error('Error in deployment process:', error);
       setError(error.message || 'Failed to deploy token');
+      addTerminalLine("CRITICAL ERROR: " + error.message);
     } finally {
       setIsSubmitting(false);
       setDeploymentStatus('');
@@ -352,28 +417,52 @@ function TokenDeployer() {
 
   return (
     <div className="token-deployer">
+      <div className="ascii-header" style={{ whiteSpace: 'pre', fontFamily: 'monospace', textAlign: 'center', marginBottom: '2rem' }}>
+        {ASCII_HEADER}
+      </div>
+      
       <BuyBeraModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onConfirm={handleBeraConfirmation}
       />
-      <h1>Deploy Your Token</h1>
+      
+      <h1>DEPLOY YOUR TOKEN</h1>
+      
       {error && (
         <div className="error-message">
           {error}
         </div>
       )}
+      
       {deploymentStatus && (
         <div className="deployment-status">
           {deploymentStatus}
         </div>
       )}
+      
+      {terminalOutput.length > 0 && (
+        <div className="terminal-output" style={{
+          background: '#000',
+          border: '1px solid #fff',
+          padding: '1rem',
+          fontFamily: 'monospace',
+          marginBottom: '1.5rem',
+          whiteSpace: 'pre-line',
+          lineHeight: '1.5'
+        }}>
+          {terminalOutput.map((line, index) => (
+            <div key={index}>{line}</div>
+          ))}
+        </div>
+      )}
+      
       <form onSubmit={handleSubmit} className="deploy-form">
         {/* Basic Token Information */}
         <div className="form-section">
-          <h2>Basic Information</h2>
+          <h2>BASIC INFORMATION</h2>
           <div className="form-group">
-            <label htmlFor="tokenName">Token Name*</label>
+            <label htmlFor="tokenName">TOKEN NAME*</label>
             <input
               type="text"
               id="tokenName"
@@ -386,7 +475,7 @@ function TokenDeployer() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="tokenSymbol">Token Symbol*</label>
+            <label htmlFor="tokenSymbol">TOKEN SYMBOL*</label>
             <input
               type="text"
               id="tokenSymbol"
@@ -400,7 +489,7 @@ function TokenDeployer() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="tokenDescription">Token Description*</label>
+            <label htmlFor="tokenDescription">TOKEN DESCRIPTION*</label>
             <textarea
               id="tokenDescription"
               name="tokenDescription"
@@ -415,9 +504,9 @@ function TokenDeployer() {
 
         {/* Token Logo */}
         <div className="form-section">
-          <h2>Token Logo</h2>
+          <h2>TOKEN LOGO</h2>
           <div className="form-group logo-upload">
-            <label htmlFor="tokenLogo">Upload Logo* (Max 5MB)</label>
+            <label htmlFor="tokenLogo">UPLOAD LOGO* (MAX 5MB)</label>
             <input
               type="file"
               id="tokenLogo"
@@ -437,8 +526,8 @@ function TokenDeployer() {
         {/* Social Media Links */}
         <div className="form-section">
           <div className="section-header">
-            <h2>Social Media</h2>
-            <span className="optional-tag">Optional</span>
+            <h2>SOCIAL MEDIA</h2>
+            <span className="optional-tag">OPTIONAL</span>
           </div>
           <p className="section-description">
             Add your social media links to help people find and connect with your project
@@ -476,7 +565,7 @@ function TokenDeployer() {
 
         {/* Website Options */}
         <div className="form-section">
-          <h2>Website Configuration</h2>
+          <h2>WEBSITE CONFIGURATION</h2>
           <p className="section-description">
             Choose how you want to showcase your token online
           </p>
@@ -491,7 +580,7 @@ function TokenDeployer() {
                 onChange={handleWebsiteOptionChange}
               />
               <label htmlFor="existing">
-                <h3>Use Existing Website</h3>
+                <h3>USE EXISTING WEBSITE</h3>
                 <p>Connect your token to your current website</p>
               </label>
             </div>
@@ -506,7 +595,7 @@ function TokenDeployer() {
                 onChange={handleWebsiteOptionChange}
               />
               <label htmlFor="create">
-                <h3>Create Bexie Website</h3>
+                <h3>CREATE BEXIE WEBSITE</h3>
                 <p>Let us create a professional website for your token</p>
               </label>
             </div>
@@ -514,7 +603,7 @@ function TokenDeployer() {
 
           {formData.websiteOption === 'existing' && (
             <div className="form-group website-url-input">
-              <label htmlFor="websiteUrl">Website URL*</label>
+              <label htmlFor="websiteUrl">WEBSITE URL*</label>
               <input
                 type="url"
                 id="websiteUrl"
@@ -533,7 +622,7 @@ function TokenDeployer() {
           className="submit-button" 
           disabled={isSubmitting}
         >
-          {isSubmitting ? 'Deploying...' : 'Deploy Token'}
+          {isSubmitting ? 'DEPLOYING...' : 'DEPLOY TOKEN'}
         </button>
       </form>
     </div>

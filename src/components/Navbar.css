@@ -1,54 +1,84 @@
+/* ASCII Art Noir Theme for Navbar */
+:root {
+  --bg-color: #000000;
+  --text-color: #FFFFFF;
+  --border-color: #333333;
+  --card-bg: #111111;
+  --accent-color: #FFFFFF;
+  --error-color: #FFFFFF;
+  --success-color: #FFFFFF;
+}
+
+/* Scan line animation */
+@keyframes scanline {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 30px;
+  }
+}
+
+/* Character flicker animation */
+@keyframes flicker {
+  0% { opacity: 1; }
+  49% { opacity: 1; }
+  50% { opacity: 0.8; }
+  51% { opacity: 1; }
+  59% { opacity: 1; }
+  60% { opacity: 0.8; }
+  61% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+/* Link hover animation */
+@keyframes linkHover {
+  0% { background-position: 0 0; }
+  100% { background-position: 100% 0; }
+}
+
 .navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: #2c3e50;
-  color: white;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  position: relative;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--border-color);
+  z-index: 10;
 }
 
-.nav-brand a {
-  color: white;
-  text-decoration: none;
-  font-size: 1.5rem;
-  font-weight: bold;
+/* Scan line effect */
+.navbar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  animation: scanline 10s linear infinite;
+  z-index: 1;
 }
 
-.nav-links {
-  display: flex;
-  gap: 2rem;
-}
-
-.nav-links a {
-  color: white;
-  text-decoration: none;
-}
-
-.nav-wallet {
+.navbar-brand {
   display: flex;
   align-items: center;
-  gap: 1rem;
-}
-
-.wallet-address {
-  background-color: #34495e;
-  padding: 0.5rem 1rem;
-  border-radius: 5px;
-  font-family: monospace;
-}
-
-.disconnect-button {
-  background-color: #e74c3c;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.disconnect-button:hover {
-  background-color: #c0392b;
+  position: relative;
+  z-index: 2;
 }
 
 .navbar-logo {
@@ -56,9 +86,137 @@
   object-fit: contain;
   margin-right: 16px;
   vertical-align: middle;
+  filter: brightness(0) invert(1); /* Make logo white */
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
 }
 
-.navbar-brand {
+.navbar-brand:hover .navbar-logo {
+  filter: brightness(0) invert(0.8); /* Slightly dim on hover */
+  animation: flicker 2s infinite;
+}
+
+.nav-links {
+  display: flex;
+  gap: 2rem;
+  position: relative;
+  z-index: 2;
+}
+
+.nav-links a {
+  color: var(--text-color);
+  text-decoration: none;
+  position: relative;
+  transition: all 0.2s ease;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  border: 1px solid transparent;
+}
+
+.nav-links a::before {
+  content: "[ ";
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.nav-links a::after {
+  content: " ]";
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.nav-links a:hover {
+  border-color: var(--text-color);
+}
+
+.nav-links a:hover::before,
+.nav-links a:hover::after {
+  opacity: 1;
+}
+
+.nav-links a:active {
+  background-color: var(--text-color);
+  color: var(--bg-color);
+}
+
+.nav-wallet {
   display: flex;
   align-items: center;
+  gap: 1rem;
+  position: relative;
+  z-index: 2;
+}
+
+/* Custom styling for RainbowKit connect button */
+.nav-wallet :global(.iek6y2z) {
+  background-color: var(--bg-color) !important;
+  border: 1px solid var(--text-color) !important;
+  border-radius: 0 !important;
+  color: var(--text-color) !important;
+  font-family: 'Courier New', monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  transition: all 0.2s ease !important;
+}
+
+.nav-wallet :global(.iek6y2z:hover) {
+  background-color: var(--text-color) !important;
+  color: var(--bg-color) !important;
+}
+
+/* Wallet address display */
+.wallet-address {
+  background-color: var(--card-bg);
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--text-color);
+  border-radius: 0; /* Sharp corners for terminal aesthetic */
+  font-family: monospace;
+  position: relative;
+  overflow: hidden;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+.wallet-address::after {
+  content: "_";
+  animation: flicker 2s infinite;
+}
+
+.disconnect-button {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--text-color);
+  padding: 0.5rem 1rem;
+  border-radius: 0; /* Sharp corners */
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.2s ease;
+}
+
+.disconnect-button:hover {
+  background-color: var(--text-color);
+  color: var(--bg-color);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: column;
+    padding: 1rem;
+  }
+  
+  .nav-links {
+    margin: 1rem 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .nav-wallet {
+    width: 100%;
+    justify-content: center;
+  }
 } 

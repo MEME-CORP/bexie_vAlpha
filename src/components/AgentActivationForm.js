@@ -8,6 +8,25 @@ const personalTraits = [
   'Optimistic', 'Realistic', 'Technical', 'Simple', 'Detailed'
 ];
 
+// ASCII Art for header
+const ASCII_HEADER = `
+  +-+-+-+-+-+-+-+ +-+-+-+-+-+
+  |A|C|T|I|V|A|T|E| |A|G|E|N|T|
+  +-+-+-+-+-+-+-+ +-+-+-+-+-+
+`;
+
+// ASCII Art for steps
+const ASCII_STEPS = `
+  [1]--BASIC CONFIG--[2]--TELEGRAM SETUP--[3]--CONFIRMATION
+`;
+
+// ASCII Art for confirmation
+const ASCII_CONFIRMATION = `
+  +-+-+-+-+-+-+-+-+-+-+
+  |C|O|N|F|I|R|M|A|T|I|O|N|
+  +-+-+-+-+-+-+-+-+-+-+
+`;
+
 function AgentActivationForm({ onClose, tokenName }) {
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   const [step, setStep] = useState(1);
@@ -18,16 +37,28 @@ function AgentActivationForm({ onClose, tokenName }) {
     botToken: '',
     telegramUsername: ''
   });
+  const [terminalOutput, setTerminalOutput] = useState([
+    '> INITIALIZING AGENT ACTIVATION SEQUENCE...',
+    '> READY FOR CONFIGURATION INPUT.'
+  ]);
+
+  // Function to add terminal-style output
+  const addTerminalLine = (line) => {
+    setTerminalOutput(prev => [...prev, `> ${line}`]);
+  };
 
   const handleTraitSelection = (trait) => {
     setFormData(prev => {
       const traits = [...prev.selectedTraits];
       if (traits.includes(trait)) {
+        addTerminalLine(`REMOVED TRAIT: ${trait.toUpperCase()}`);
         return { ...prev, selectedTraits: traits.filter(t => t !== trait) };
       }
       if (traits.length < 3) {
+        addTerminalLine(`ADDED TRAIT: ${trait.toUpperCase()}`);
         return { ...prev, selectedTraits: [...traits, trait] };
       }
+      addTerminalLine('MAXIMUM TRAITS REACHED (3/3)');
       return prev;
     });
   };
